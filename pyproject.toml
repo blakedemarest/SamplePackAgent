@@ -1,1 +1,23 @@
 # pyproject.toml
+[project]
+name = "SamplePackAgent"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.8"
+
+[project.dependencies]
+elevenlabs = "*"
+pydub = "*"
+ffmpeg-python = "*"
+ruamel.yaml = "*"
+mutagen = "*"
+pyloudnorm = "*"
+gitingest = "*"
+jinja2 = "*"
+click = "*"
+python-dotenv = "*"
+pytest = "*"
+PyQt5 = "*"
+
+[project.scripts]
+samplepackagent = "scripts.run_agent:main"
