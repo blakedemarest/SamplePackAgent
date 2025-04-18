@@ -8,19 +8,27 @@ elevenlabs:
 
 # Ollama/Gemma settings
 gemma:
-  model: "gemma3:12b"
+  model: "gemma3:12b" # Make sure you have this model pulled in Ollama
 
 # Output settings
 output:
-  folder: "./output_sfx"
+  folder: "./output_sfx" # Relative to config file location
   file_format: "wav"
 
-# Prompt defaults
+# Prompt defaults & generation parameters
 prompt:
-  default_duration: 1.5       # seconds
-  prompt_influence: 0.8       # 0.0–1.0
-  batch_influences: [0.6, 0.8, 1.0]
+  default_duration: 1.5       # seconds (fallback if not in decomposed params)
+  prompt_influence: 0.8       # 0.0–1.0 (fallback if not in decomposed params)
+  batch_influences: [0.6, 0.8, 1.0] # List of influences for variation generation
+
+# Post-processing settings
+processing:
+  target_lufs: -18.0          # Target loudness for normalization
+
+# Library settings
+library:
+  path: "prompt_library.yml"  # Relative to config file location
 
 # Logging
 logging:
-  level: INFO
+  level: INFO                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
