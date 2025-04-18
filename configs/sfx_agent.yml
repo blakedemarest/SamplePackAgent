@@ -1,1 +1,26 @@
 # sfx_agent.yml
+# Default settings for SamplePackAgent
+
+# ElevenLabs sound‑effects model & voice
+elevenlabs:
+  voice: "sound_effects"
+  model: "eleven_multisfx_v1"
+
+# Ollama/Gemma settings
+gemma:
+  model: "gemma3:12b"
+
+# Output settings
+output:
+  folder: "./output_sfx"
+  file_format: "wav"
+
+# Prompt defaults
+prompt:
+  default_duration: 1.5       # seconds
+  prompt_influence: 0.8       # 0.0–1.0
+  batch_influences: [0.6, 0.8, 1.0]
+
+# Logging
+logging:
+  level: INFO
