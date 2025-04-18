@@ -1,0 +1,2281 @@
+--- .gitignore ---
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# dotenv environment variables
+.env
+
+# Ollama cache (if used)
+ollama.cache/
+
+# ElevenLabs API artifacts (if any)
+*.wav
+*.mp3
+
+# Output directory for generated SFX
+/output_sfx/
+
+# Logs
+logs/
+*.log
+
+# YAML prompt library
+prompt_library.yml
+
+
+--- codebase.txt ---
+
+
+--- gitingest.py ---
+#!/usr/bin/env python3
+"""
+scripts/gitingest_export.py
+
+Generates:
+  1) A plaintext dump of the entire codebase (codebase.txt)
+  2) A directory tree listing (tree.txt)
+
+Ignores patterns from .gitignore plus any “venv” directory.
+"""
+
+import os
+import fnmatch
+from pathlib import Path
+
+# ——————————————— CONFIG ————————————————
+# PROJECT ROOT and OUTPUT DIRECTORY both point to SamplePackAgent
+ROOT        = Path(r"C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent")
+IGNORE_FILE = ROOT / ".gitignore"
+EXTRA_IGNORES = ["venv/*", "*/venv/*"]
+OUT_DIR      = ROOT
+CODEBASE_DOC = OUT_DIR / "codebase.txt"
+TREE_DOC     = OUT_DIR / "tree.txt"
+
+
+def load_ignore_patterns():
+    patterns = set(EXTRA_IGNORES)
+    if IGNORE_FILE.exists():
+        for line in IGNORE_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            patterns.add(line)
+    return list(patterns)
+
+
+def is_ignored(rel_path: str, patterns: list[str]) -> bool:
+    for pat in patterns:
+        if fnmatch.fnmatch(rel_path, pat):
+            return True
+    return False
+
+
+def write_codebase(patterns: list[str]):
+    with CODEBASE_DOC.open("w", encoding="utf-8") as out:
+        for root, dirs, files in os.walk(ROOT):
+            rel_dir = os.path.relpath(root, ROOT)
+            if is_ignored(rel_dir + "/", patterns):
+                dirs[:] = []
+                continue
+
+            for fname in files:
+                rel_file = os.path.normpath(os.path.join(rel_dir, fname))
+                if is_ignored(rel_file, patterns):
+                    continue
+
+                file_path = ROOT / rel_file
+                out.write(f"--- {rel_file} ---\n")
+                try:
+                    text = file_path.read_text(encoding="utf-8")
+                except Exception:
+                    text = f"[Could not read file: {file_path}]\n"
+                out.write(text + "\n\n")
+
+
+def write_tree(patterns: list[str]):
+    lines = []
+
+    def recurse(dir_path: Path, prefix=""):
+        entries = sorted(dir_path.iterdir())
+        filtered = [e for e in entries if not is_ignored(str(e.relative_to(ROOT)), patterns)]
+        for i, entry in enumerate(filtered):
+            connector = "└── " if i == len(filtered) - 1 else "├── "
+            lines.append(f"{prefix}{connector}{entry.name}")
+            if entry.is_dir():
+                extension = "    " if i == len(filtered) - 1 else "│   "
+                recurse(entry, prefix + extension)
+
+    lines.append(".")
+    recurse(ROOT)
+    with TREE_DOC.open("w", encoding="utf-8") as out:
+        out.write("\n".join(lines))
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    patterns = load_ignore_patterns()
+    write_codebase(patterns)
+    write_tree(patterns)
+    print(f"✅ Generated codebase at {CODEBASE_DOC}")
+    print(f"✅ Generated tree view at {TREE_DOC}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+--- pyproject.toml ---
+# pyproject.toml
+[project]
+name = "SamplePackAgent"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.8"
+
+[project.dependencies]
+elevenlabs = "*"
+pydub = "*"
+ffmpeg-python = "*"
+ruamel.yaml = "*"
+mutagen = "*"
+pyloudnorm = "*"
+gitingest = "*"
+jinja2 = "*"
+click = "*"
+python-dotenv = "*"
+pytest = "*"
+PyQt5 = "*"
+
+[project.scripts]
+samplepackagent = "scripts.run_agent:main"
+
+
+--- README.md ---
+# README.md
+
+
+--- requirements.txt ---
+# requirements.txt
+# Core SFX agent
+elevenlabs>=0.1.0
+pydub>=0.25.1
+ffmpeg-python>=0.2.0
+ruamel.yaml>=0.17.21
+mutagen>=1.45.1
+pyloudnorm>=0.1.0
+gitingest
+jinja2>=3.1.2
+click>=8.1.3
+python-dotenv>=1.0.0
+pytest>=7.4.0
+
+#UI
+PyQt5>=5.15.9
+
+
+--- .git\COMMIT_EDITMSG ---
+ unit testing
+
+
+--- .git\config ---
+[core]
+	repositoryformatversion = 0
+	filemode = false
+	bare = false
+	logallrefupdates = true
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = https://github.com/blakedemarest/SamplePackAgent.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+	remote = origin
+	merge = refs/heads/main
+
+
+--- .git\description ---
+Unnamed repository; edit this file 'description' to name the repository.
+
+
+--- .git\HEAD ---
+ref: refs/heads/main
+
+
+--- .git\index ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\index]
+
+
+--- .git\hooks\applypatch-msg.sample ---
+#!/bin/sh
+#
+# An example hook script to check the commit log message taken by
+# applypatch from an e-mail message.
+#
+# The hook should exit with non-zero status after issuing an
+# appropriate message if it wants to stop the commit.  The hook is
+# allowed to edit the commit message file.
+#
+# To enable this hook, rename this file to "applypatch-msg".
+
+. git-sh-setup
+commitmsg="$(git rev-parse --git-path hooks/commit-msg)"
+test -x "$commitmsg" && exec "$commitmsg" ${1+"$@"}
+:
+
+
+--- .git\hooks\commit-msg.sample ---
+#!/bin/sh
+#
+# An example hook script to check the commit log message.
+# Called by "git commit" with one argument, the name of the file
+# that has the commit message.  The hook should exit with non-zero
+# status after issuing an appropriate message if it wants to stop the
+# commit.  The hook is allowed to edit the commit message file.
+#
+# To enable this hook, rename this file to "commit-msg".
+
+# Uncomment the below to add a Signed-off-by line to the message.
+# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+# hook is more suited to it.
+#
+# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+
+# This example catches duplicate Signed-off-by lines.
+
+test "" = "$(grep '^Signed-off-by: ' "$1" |
+	 sort | uniq -c | sed -e '/^[ 	]*1[ 	]/d')" || {
+	echo >&2 Duplicate Signed-off-by lines.
+	exit 1
+}
+
+
+--- .git\hooks\fsmonitor-watchman.sample ---
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use IPC::Open2;
+
+# An example hook script to integrate Watchman
+# (https://facebook.github.io/watchman/) with git to speed up detecting
+# new and modified files.
+#
+# The hook is passed a version (currently 2) and last update token
+# formatted as a string and outputs to stdout a new update token and
+# all files that have been modified since the update token. Paths must
+# be relative to the root of the working tree and separated by a single NUL.
+#
+# To enable this hook, rename this file to "query-watchman" and set
+# 'git config core.fsmonitor .git/hooks/query-watchman'
+#
+my ($version, $last_update_token) = @ARGV;
+
+# Uncomment for debugging
+# print STDERR "$0 $version $last_update_token\n";
+
+# Check the hook interface version
+if ($version ne 2) {
+	die "Unsupported query-fsmonitor hook version '$version'.\n" .
+	    "Falling back to scanning...\n";
+}
+
+my $git_work_tree = get_working_dir();
+
+my $retry = 1;
+
+my $json_pkg;
+eval {
+	require JSON::XS;
+	$json_pkg = "JSON::XS";
+	1;
+} or do {
+	require JSON::PP;
+	$json_pkg = "JSON::PP";
+};
+
+launch_watchman();
+
+sub launch_watchman {
+	my $o = watchman_query();
+	if (is_work_tree_watched($o)) {
+		output_result($o->{clock}, @{$o->{files}});
+	}
+}
+
+sub output_result {
+	my ($clockid, @files) = @_;
+
+	# Uncomment for debugging watchman output
+	# open (my $fh, ">", ".git/watchman-output.out");
+	# binmode $fh, ":utf8";
+	# print $fh "$clockid\n@files\n";
+	# close $fh;
+
+	binmode STDOUT, ":utf8";
+	print $clockid;
+	print "\0";
+	local $, = "\0";
+	print @files;
+}
+
+sub watchman_clock {
+	my $response = qx/watchman clock "$git_work_tree"/;
+	die "Failed to get clock id on '$git_work_tree'.\n" .
+		"Falling back to scanning...\n" if $? != 0;
+
+	return $json_pkg->new->utf8->decode($response);
+}
+
+sub watchman_query {
+	my $pid = open2(\*CHLD_OUT, \*CHLD_IN, 'watchman -j --no-pretty')
+	or die "open2() failed: $!\n" .
+	"Falling back to scanning...\n";
+
+	# In the query expression below we're asking for names of files that
+	# changed since $last_update_token but not from the .git folder.
+	#
+	# To accomplish this, we're using the "since" generator to use the
+	# recency index to select candidate nodes and "fields" to limit the
+	# output to file names only. Then we're using the "expression" term to
+	# further constrain the results.
+	my $last_update_line = "";
+	if (substr($last_update_token, 0, 1) eq "c") {
+		$last_update_token = "\"$last_update_token\"";
+		$last_update_line = qq[\n"since": $last_update_token,];
+	}
+	my $query = <<"	END";
+		["query", "$git_work_tree", {$last_update_line
+			"fields": ["name"],
+			"expression": ["not", ["dirname", ".git"]]
+		}]
+	END
+
+	# Uncomment for debugging the watchman query
+	# open (my $fh, ">", ".git/watchman-query.json");
+	# print $fh $query;
+	# close $fh;
+
+	print CHLD_IN $query;
+	close CHLD_IN;
+	my $response = do {local $/; <CHLD_OUT>};
+
+	# Uncomment for debugging the watch response
+	# open ($fh, ">", ".git/watchman-response.json");
+	# print $fh $response;
+	# close $fh;
+
+	die "Watchman: command returned no output.\n" .
+	"Falling back to scanning...\n" if $response eq "";
+	die "Watchman: command returned invalid output: $response\n" .
+	"Falling back to scanning...\n" unless $response =~ /^\{/;
+
+	return $json_pkg->new->utf8->decode($response);
+}
+
+sub is_work_tree_watched {
+	my ($output) = @_;
+	my $error = $output->{error};
+	if ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {
+		$retry--;
+		my $response = qx/watchman watch "$git_work_tree"/;
+		die "Failed to make watchman watch '$git_work_tree'.\n" .
+		    "Falling back to scanning...\n" if $? != 0;
+		$output = $json_pkg->new->utf8->decode($response);
+		$error = $output->{error};
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+
+		# Uncomment for debugging watchman output
+		# open (my $fh, ">", ".git/watchman-output.out");
+		# close $fh;
+
+		# Watchman will always return all files on the first query so
+		# return the fast "everything is dirty" flag to git and do the
+		# Watchman query just to get it over with now so we won't pay
+		# the cost in git to look up each individual file.
+		my $o = watchman_clock();
+		$error = $output->{error};
+
+		die "Watchman: $error.\n" .
+		"Falling back to scanning...\n" if $error;
+
+		output_result($o->{clock}, ("/"));
+		$last_update_token = $o->{clock};
+
+		eval { launch_watchman() };
+		return 0;
+	}
+
+	die "Watchman: $error.\n" .
+	"Falling back to scanning...\n" if $error;
+
+	return 1;
+}
+
+sub get_working_dir {
+	my $working_dir;
+	if ($^O =~ 'msys' || $^O =~ 'cygwin') {
+		$working_dir = Win32::GetCwd();
+		$working_dir =~ tr/\\/\//;
+	} else {
+		require Cwd;
+		$working_dir = Cwd::cwd();
+	}
+
+	return $working_dir;
+}
+
+
+--- .git\hooks\post-update.sample ---
+#!/bin/sh
+#
+# An example hook script to prepare a packed repository for use over
+# dumb transports.
+#
+# To enable this hook, rename this file to "post-update".
+
+exec git update-server-info
+
+
+--- .git\hooks\pre-applypatch.sample ---
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed
+# by applypatch from an e-mail message.
+#
+# The hook should exit with non-zero status after issuing an
+# appropriate message if it wants to stop the commit.
+#
+# To enable this hook, rename this file to "pre-applypatch".
+
+. git-sh-setup
+precommit="$(git rev-parse --git-path hooks/pre-commit)"
+test -x "$precommit" && exec "$precommit" ${1+"$@"}
+:
+
+
+--- .git\hooks\pre-commit.sample ---
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git commit" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message if
+# it wants to stop the commit.
+#
+# To enable this hook, rename this file to "pre-commit".
+
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+	against=HEAD
+else
+	# Initial commit: diff against an empty tree object
+	against=$(git hash-object -t tree /dev/null)
+fi
+
+# If you want to allow non-ASCII filenames set this variable to true.
+allownonascii=$(git config --type=bool hooks.allownonascii)
+
+# Redirect output to stderr.
+exec 1>&2
+
+# Cross platform projects tend to avoid non-ASCII filenames; prevent
+# them from being added to the repository. We exploit the fact that the
+# printable range starts at the space character and ends with tilde.
+if [ "$allownonascii" != "true" ] &&
+	# Note that the use of brackets around a tr range is ok here, (it's
+	# even required, for portability to Solaris 10's /usr/bin/tr), since
+	# the square bracket bytes happen to fall in the designated range.
+	test $(git diff-index --cached --name-only --diff-filter=A -z $against |
+	  LC_ALL=C tr -d '[ -~]\0' | wc -c) != 0
+then
+	cat <<\EOF
+Error: Attempt to add a non-ASCII file name.
+
+This can cause problems if you want to work with people on other platforms.
+
+To be portable it is advisable to rename the file.
+
+If you know what you are doing you can disable this check using:
+
+  git config hooks.allownonascii true
+EOF
+	exit 1
+fi
+
+# If there are whitespace errors, print the offending file names and fail.
+exec git diff-index --check --cached $against --
+
+
+--- .git\hooks\pre-merge-commit.sample ---
+#!/bin/sh
+#
+# An example hook script to verify what is about to be committed.
+# Called by "git merge" with no arguments.  The hook should
+# exit with non-zero status after issuing an appropriate message to
+# stderr if it wants to stop the merge commit.
+#
+# To enable this hook, rename this file to "pre-merge-commit".
+
+. git-sh-setup
+test -x "$GIT_DIR/hooks/pre-commit" &&
+        exec "$GIT_DIR/hooks/pre-commit"
+:
+
+
+--- .git\hooks\pre-push.sample ---
+#!/bin/sh
+
+# An example hook script to verify what is about to be pushed.  Called by "git
+# push" after it has checked the remote status, but before anything has been
+# pushed.  If this script exits with a non-zero status nothing will be pushed.
+#
+# This hook is called with the following parameters:
+#
+# $1 -- Name of the remote to which the push is being done
+# $2 -- URL to which the push is being done
+#
+# If pushing without using a named remote those arguments will be equal.
+#
+# Information about the commits which are being pushed is supplied as lines to
+# the standard input in the form:
+#
+#   <local ref> <local oid> <remote ref> <remote oid>
+#
+# This sample shows how to prevent push of commits where the log message starts
+# with "WIP" (work in progress).
+
+remote="$1"
+url="$2"
+
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+
+while read local_ref local_oid remote_ref remote_oid
+do
+	if test "$local_oid" = "$zero"
+	then
+		# Handle delete
+		:
+	else
+		if test "$remote_oid" = "$zero"
+		then
+			# New branch, examine all commits
+			range="$local_oid"
+		else
+			# Update to existing branch, examine new commits
+			range="$remote_oid..$local_oid"
+		fi
+
+		# Check for WIP commit
+		commit=$(git rev-list -n 1 --grep '^WIP' "$range")
+		if test -n "$commit"
+		then
+			echo >&2 "Found WIP commit in $local_ref, not pushing"
+			exit 1
+		fi
+	fi
+done
+
+exit 0
+
+
+--- .git\hooks\pre-rebase.sample ---
+#!/bin/sh
+#
+# Copyright (c) 2006, 2008 Junio C Hamano
+#
+# The "pre-rebase" hook is run just before "git rebase" starts doing
+# its job, and can prevent the command from running by exiting with
+# non-zero status.
+#
+# The hook is called with the following parameters:
+#
+# $1 -- the upstream the series was forked from.
+# $2 -- the branch being rebased (or empty when rebasing the current branch).
+#
+# This sample shows how to prevent topic branches that are already
+# merged to 'next' branch from getting rebased, because allowing it
+# would result in rebasing already published history.
+
+publish=next
+basebranch="$1"
+if test "$#" = 2
+then
+	topic="refs/heads/$2"
+else
+	topic=`git symbolic-ref HEAD` ||
+	exit 0 ;# we do not interrupt rebasing detached HEAD
+fi
+
+case "$topic" in
+refs/heads/??/*)
+	;;
+*)
+	exit 0 ;# we do not interrupt others.
+	;;
+esac
+
+# Now we are dealing with a topic branch being rebased
+# on top of master.  Is it OK to rebase it?
+
+# Does the topic really exist?
+git show-ref -q "$topic" || {
+	echo >&2 "No such branch $topic"
+	exit 1
+}
+
+# Is topic fully merged to master?
+not_in_master=`git rev-list --pretty=oneline ^master "$topic"`
+if test -z "$not_in_master"
+then
+	echo >&2 "$topic is fully merged to master; better remove it."
+	exit 1 ;# we could allow it, but there is no point.
+fi
+
+# Is topic ever merged to next?  If so you should not be rebasing it.
+only_next_1=`git rev-list ^master "^$topic" ${publish} | sort`
+only_next_2=`git rev-list ^master           ${publish} | sort`
+if test "$only_next_1" = "$only_next_2"
+then
+	not_in_topic=`git rev-list "^$topic" master`
+	if test -z "$not_in_topic"
+	then
+		echo >&2 "$topic is already up to date with master"
+		exit 1 ;# we could allow it, but there is no point.
+	else
+		exit 0
+	fi
+else
+	not_in_next=`git rev-list --pretty=oneline ^${publish} "$topic"`
+	/usr/bin/perl -e '
+		my $topic = $ARGV[0];
+		my $msg = "* $topic has commits already merged to public branch:\n";
+		my (%not_in_next) = map {
+			/^([0-9a-f]+) /;
+			($1 => 1);
+		} split(/\n/, $ARGV[1]);
+		for my $elem (map {
+				/^([0-9a-f]+) (.*)$/;
+				[$1 => $2];
+			} split(/\n/, $ARGV[2])) {
+			if (!exists $not_in_next{$elem->[0]}) {
+				if ($msg) {
+					print STDERR $msg;
+					undef $msg;
+				}
+				print STDERR " $elem->[1]\n";
+			}
+		}
+	' "$topic" "$not_in_next" "$not_in_master"
+	exit 1
+fi
+
+<<\DOC_END
+
+This sample hook safeguards topic branches that have been
+published from being rewound.
+
+The workflow assumed here is:
+
+ * Once a topic branch forks from "master", "master" is never
+   merged into it again (either directly or indirectly).
+
+ * Once a topic branch is fully cooked and merged into "master",
+   it is deleted.  If you need to build on top of it to correct
+   earlier mistakes, a new topic branch is created by forking at
+   the tip of the "master".  This is not strictly necessary, but
+   it makes it easier to keep your history simple.
+
+ * Whenever you need to test or publish your changes to topic
+   branches, merge them into "next" branch.
+
+The script, being an example, hardcodes the publish branch name
+to be "next", but it is trivial to make it configurable via
+$GIT_DIR/config mechanism.
+
+With this workflow, you would want to know:
+
+(1) ... if a topic branch has ever been merged to "next".  Young
+    topic branches can have stupid mistakes you would rather
+    clean up before publishing, and things that have not been
+    merged into other branches can be easily rebased without
+    affecting other people.  But once it is published, you would
+    not want to rewind it.
+
+(2) ... if a topic branch has been fully merged to "master".
+    Then you can delete it.  More importantly, you should not
+    build on top of it -- other people may already want to
+    change things related to the topic as patches against your
+    "master", so if you need further changes, it is better to
+    fork the topic (perhaps with the same name) afresh from the
+    tip of "master".
+
+Let's look at this example:
+
+		   o---o---o---o---o---o---o---o---o---o "next"
+		  /       /           /           /
+		 /   a---a---b A     /           /
+		/   /               /           /
+	       /   /   c---c---c---c B         /
+	      /   /   /             \         /
+	     /   /   /   b---b C     \       /
+	    /   /   /   /             \     /
+    ---o---o---o---o---o---o---o---o---o---o---o "master"
+
+
+A, B and C are topic branches.
+
+ * A has one fix since it was merged up to "next".
+
+ * B has finished.  It has been fully merged up to "master" and "next",
+   and is ready to be deleted.
+
+ * C has not merged to "next" at all.
+
+We would want to allow C to be rebased, refuse A, and encourage
+B to be deleted.
+
+To compute (1):
+
+	git rev-list ^master ^topic next
+	git rev-list ^master        next
+
+	if these match, topic has not merged in next at all.
+
+To compute (2):
+
+	git rev-list master..topic
+
+	if this is empty, it is fully merged to "master".
+
+DOC_END
+
+
+--- .git\hooks\pre-receive.sample ---
+#!/bin/sh
+#
+# An example hook script to make use of push options.
+# The example simply echoes all push options that start with 'echoback='
+# and rejects all pushes when the "reject" push option is used.
+#
+# To enable this hook, rename this file to "pre-receive".
+
+if test -n "$GIT_PUSH_OPTION_COUNT"
+then
+	i=0
+	while test "$i" -lt "$GIT_PUSH_OPTION_COUNT"
+	do
+		eval "value=\$GIT_PUSH_OPTION_$i"
+		case "$value" in
+		echoback=*)
+			echo "echo from the pre-receive-hook: ${value#*=}" >&2
+			;;
+		reject)
+			exit 1
+		esac
+		i=$((i + 1))
+	done
+fi
+
+
+--- .git\hooks\prepare-commit-msg.sample ---
+#!/bin/sh
+#
+# An example hook script to prepare the commit log message.
+# Called by "git commit" with the name of the file that has the
+# commit message, followed by the description of the commit
+# message's source.  The hook's purpose is to edit the commit
+# message file.  If the hook fails with a non-zero status,
+# the commit is aborted.
+#
+# To enable this hook, rename this file to "prepare-commit-msg".
+
+# This hook includes three examples. The first one removes the
+# "# Please enter the commit message..." help message.
+#
+# The second includes the output of "git diff --name-status -r"
+# into the message, just before the "git status" output.  It is
+# commented because it doesn't cope with --amend or with squashed
+# commits.
+#
+# The third example adds a Signed-off-by line to the message, that can
+# still be edited.  This is rarely a good idea.
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
+
+/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' "$COMMIT_MSG_FILE"
+
+# case "$COMMIT_SOURCE,$SHA1" in
+#  ,|template,)
+#    /usr/bin/perl -i.bak -pe '
+#       print "\n" . `git diff --cached --name-status -r`
+# 	 if /^#/ && $first++ == 0' "$COMMIT_MSG_FILE" ;;
+#  *) ;;
+# esac
+
+# SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# git interpret-trailers --in-place --trailer "$SOB" "$COMMIT_MSG_FILE"
+# if test -z "$COMMIT_SOURCE"
+# then
+#   /usr/bin/perl -i.bak -pe 'print "\n" if !$first_line++' "$COMMIT_MSG_FILE"
+# fi
+
+
+--- .git\hooks\push-to-checkout.sample ---
+#!/bin/sh
+
+# An example hook script to update a checked-out tree on a git push.
+#
+# This hook is invoked by git-receive-pack(1) when it reacts to git
+# push and updates reference(s) in its repository, and when the push
+# tries to update the branch that is currently checked out and the
+# receive.denyCurrentBranch configuration variable is set to
+# updateInstead.
+#
+# By default, such a push is refused if the working tree and the index
+# of the remote repository has any difference from the currently
+# checked out commit; when both the working tree and the index match
+# the current commit, they are updated to match the newly pushed tip
+# of the branch. This hook is to be used to override the default
+# behaviour; however the code below reimplements the default behaviour
+# as a starting point for convenient modification.
+#
+# The hook receives the commit with which the tip of the current
+# branch is going to be updated:
+commit=$1
+
+# It can exit with a non-zero status to refuse the push (when it does
+# so, it must not modify the index or the working tree).
+die () {
+	echo >&2 "$*"
+	exit 1
+}
+
+# Or it can make any necessary changes to the working tree and to the
+# index to bring them to the desired state when the tip of the current
+# branch is updated to the new commit, and exit with a zero status.
+#
+# For example, the hook can simply run git read-tree -u -m HEAD "$1"
+# in order to emulate git fetch that is run in the reverse direction
+# with git push, as the two-tree form of git read-tree -u -m is
+# essentially the same as git switch or git checkout that switches
+# branches while keeping the local changes in the working tree that do
+# not interfere with the difference between the branches.
+
+# The below is a more-or-less exact translation to shell of the C code
+# for the default behaviour for git's push-to-checkout hook defined in
+# the push_to_deploy() function in builtin/receive-pack.c.
+#
+# Note that the hook will be executed from the repository directory,
+# not from the working tree, so if you want to perform operations on
+# the working tree, you will have to adapt your code accordingly, e.g.
+# by adding "cd .." or using relative paths.
+
+if ! git update-index -q --ignore-submodules --refresh
+then
+	die "Up-to-date check failed"
+fi
+
+if ! git diff-files --quiet --ignore-submodules --
+then
+	die "Working directory has unstaged changes"
+fi
+
+# This is a rough translation of:
+#
+#   head_has_history() ? "HEAD" : EMPTY_TREE_SHA1_HEX
+if git cat-file -e HEAD 2>/dev/null
+then
+	head=HEAD
+else
+	head=$(git hash-object -t tree --stdin </dev/null)
+fi
+
+if ! git diff-index --quiet --cached --ignore-submodules $head --
+then
+	die "Working directory has staged changes"
+fi
+
+if ! git read-tree -u -m "$commit"
+then
+	die "Could not update working tree to new HEAD"
+fi
+
+
+--- .git\hooks\sendemail-validate.sample ---
+#!/bin/sh
+
+# An example hook script to validate a patch (and/or patch series) before
+# sending it via email.
+#
+# The hook should exit with non-zero status after issuing an appropriate
+# message if it wants to prevent the email(s) from being sent.
+#
+# To enable this hook, rename this file to "sendemail-validate".
+#
+# By default, it will only check that the patch(es) can be applied on top of
+# the default upstream branch without conflicts in a secondary worktree. After
+# validation (successful or not) of the last patch of a series, the worktree
+# will be deleted.
+#
+# The following config variables can be set to change the default remote and
+# remote ref that are used to apply the patches against:
+#
+#   sendemail.validateRemote (default: origin)
+#   sendemail.validateRemoteRef (default: HEAD)
+#
+# Replace the TODO placeholders with appropriate checks according to your
+# needs.
+
+validate_cover_letter () {
+	file="$1"
+	# TODO: Replace with appropriate checks (e.g. spell checking).
+	true
+}
+
+validate_patch () {
+	file="$1"
+	# Ensure that the patch applies without conflicts.
+	git am -3 "$file" || return
+	# TODO: Replace with appropriate checks for this patch
+	# (e.g. checkpatch.pl).
+	true
+}
+
+validate_series () {
+	# TODO: Replace with appropriate checks for the whole series
+	# (e.g. quick build, coding style checks, etc.).
+	true
+}
+
+# main -------------------------------------------------------------------------
+
+if test "$GIT_SENDEMAIL_FILE_COUNTER" = 1
+then
+	remote=$(git config --default origin --get sendemail.validateRemote) &&
+	ref=$(git config --default HEAD --get sendemail.validateRemoteRef) &&
+	worktree=$(mktemp --tmpdir -d sendemail-validate.XXXXXXX) &&
+	git worktree add -fd --checkout "$worktree" "refs/remotes/$remote/$ref" &&
+	git config --replace-all sendemail.validateWorktree "$worktree"
+else
+	worktree=$(git config --get sendemail.validateWorktree)
+fi || {
+	echo "sendemail-validate: error: failed to prepare worktree" >&2
+	exit 1
+}
+
+unset GIT_DIR GIT_WORK_TREE
+cd "$worktree" &&
+
+if grep -q "^diff --git " "$1"
+then
+	validate_patch "$1"
+else
+	validate_cover_letter "$1"
+fi &&
+
+if test "$GIT_SENDEMAIL_FILE_COUNTER" = "$GIT_SENDEMAIL_FILE_TOTAL"
+then
+	git config --unset-all sendemail.validateWorktree &&
+	trap 'git worktree remove -ff "$worktree"' EXIT &&
+	validate_series
+fi
+
+
+--- .git\hooks\update.sample ---
+#!/bin/sh
+#
+# An example hook script to block unannotated tags from entering.
+# Called by "git receive-pack" with arguments: refname sha1-old sha1-new
+#
+# To enable this hook, rename this file to "update".
+#
+# Config
+# ------
+# hooks.allowunannotated
+#   This boolean sets whether unannotated tags will be allowed into the
+#   repository.  By default they won't be.
+# hooks.allowdeletetag
+#   This boolean sets whether deleting tags will be allowed in the
+#   repository.  By default they won't be.
+# hooks.allowmodifytag
+#   This boolean sets whether a tag may be modified after creation. By default
+#   it won't be.
+# hooks.allowdeletebranch
+#   This boolean sets whether deleting branches will be allowed in the
+#   repository.  By default they won't be.
+# hooks.denycreatebranch
+#   This boolean sets whether remotely creating branches will be denied
+#   in the repository.  By default this is allowed.
+#
+
+# --- Command line
+refname="$1"
+oldrev="$2"
+newrev="$3"
+
+# --- Safety check
+if [ -z "$GIT_DIR" ]; then
+	echo "Don't run this script from the command line." >&2
+	echo " (if you want, you could supply GIT_DIR then run" >&2
+	echo "  $0 <ref> <oldrev> <newrev>)" >&2
+	exit 1
+fi
+
+if [ -z "$refname" -o -z "$oldrev" -o -z "$newrev" ]; then
+	echo "usage: $0 <ref> <oldrev> <newrev>" >&2
+	exit 1
+fi
+
+# --- Config
+allowunannotated=$(git config --type=bool hooks.allowunannotated)
+allowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)
+denycreatebranch=$(git config --type=bool hooks.denycreatebranch)
+allowdeletetag=$(git config --type=bool hooks.allowdeletetag)
+allowmodifytag=$(git config --type=bool hooks.allowmodifytag)
+
+# check for no description
+projectdesc=$(sed -e '1q' "$GIT_DIR/description")
+case "$projectdesc" in
+"Unnamed repository"* | "")
+	echo "*** Project description file hasn't been set" >&2
+	exit 1
+	;;
+esac
+
+# --- Check types
+# if $newrev is 0000...0000, it's a commit to delete a ref.
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+if [ "$newrev" = "$zero" ]; then
+	newrev_type=delete
+else
+	newrev_type=$(git cat-file -t $newrev)
+fi
+
+case "$refname","$newrev_type" in
+	refs/tags/*,commit)
+		# un-annotated tag
+		short_refname=${refname##refs/tags/}
+		if [ "$allowunannotated" != "true" ]; then
+			echo "*** The un-annotated tag, $short_refname, is not allowed in this repository" >&2
+			echo "*** Use 'git tag [ -a | -s ]' for tags you want to propagate." >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,delete)
+		# delete tag
+		if [ "$allowdeletetag" != "true" ]; then
+			echo "*** Deleting a tag is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/tags/*,tag)
+		# annotated tag
+		if [ "$allowmodifytag" != "true" ] && git rev-parse $refname > /dev/null 2>&1
+		then
+			echo "*** Tag '$refname' already exists." >&2
+			echo "*** Modifying a tag is not allowed in this repository." >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,commit)
+		# branch
+		if [ "$oldrev" = "$zero" -a "$denycreatebranch" = "true" ]; then
+			echo "*** Creating a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/heads/*,delete)
+		# delete branch
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	refs/remotes/*,commit)
+		# tracking branch
+		;;
+	refs/remotes/*,delete)
+		# delete tracking branch
+		if [ "$allowdeletebranch" != "true" ]; then
+			echo "*** Deleting a tracking branch is not allowed in this repository" >&2
+			exit 1
+		fi
+		;;
+	*)
+		# Anything else (is there anything else?)
+		echo "*** Update hook: unknown type of update to ref $refname of type $newrev_type" >&2
+		exit 1
+		;;
+esac
+
+# --- Finished
+exit 0
+
+
+--- .git\info\exclude ---
+# git ls-files --others --exclude-from=.git/info/exclude
+# Lines that start with '#' are comments.
+# For a project mostly in C, the following would be a good set of
+# exclude patterns (uncomment them if you want to use them):
+# *.[oa]
+# *~
+
+
+--- .git\logs\HEAD ---
+0000000000000000000000000000000000000000 a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985746 -0700	commit (initial): Initial project skeleton
+a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 0000000000000000000000000000000000000000 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985775 -0700	Branch: renamed refs/heads/master to refs/heads/main
+0000000000000000000000000000000000000000 a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985775 -0700	Branch: renamed refs/heads/master to refs/heads/main
+a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 7764bb87c87c23ba9c56d13da3083ee20d3820da blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744986251 -0700	commit: config initialization
+7764bb87c87c23ba9c56d13da3083ee20d3820da f243fd007859c8f048f2d84a4b5cdb72b562c514 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744987471 -0700	commit: unit testing
+
+
+--- .git\logs\refs\heads\main ---
+0000000000000000000000000000000000000000 a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985746 -0700	commit (initial): Initial project skeleton
+a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985775 -0700	Branch: renamed refs/heads/master to refs/heads/main
+a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 7764bb87c87c23ba9c56d13da3083ee20d3820da blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744986251 -0700	commit: config initialization
+7764bb87c87c23ba9c56d13da3083ee20d3820da f243fd007859c8f048f2d84a4b5cdb72b562c514 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744987471 -0700	commit: unit testing
+
+
+--- .git\logs\refs\remotes\origin\main ---
+0000000000000000000000000000000000000000 a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744985780 -0700	update by push
+a30ce3cf4ed5fc078b22b6f7231328a0ddeda489 7764bb87c87c23ba9c56d13da3083ee20d3820da blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744986254 -0700	update by push
+7764bb87c87c23ba9c56d13da3083ee20d3820da f243fd007859c8f048f2d84a4b5cdb72b562c514 blakedemarest <143666499+blakedemarest@users.noreply.github.com> 1744987474 -0700	update by push
+
+
+--- .git\objects\0f\6dee994a90614c0df270921db629c396f02395 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\0f\6dee994a90614c0df270921db629c396f02395]
+
+
+--- .git\objects\13\82441d5eac96a061ad921e722a2288c5144a72 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\13\82441d5eac96a061ad921e722a2288c5144a72]
+
+
+--- .git\objects\14\3f486c053e35edbe5b247f56e58c02d94fdd86 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\14\3f486c053e35edbe5b247f56e58c02d94fdd86]
+
+
+--- .git\objects\14\71ee07f2a4d9c3fcf115dbc2a210695fd09b8f ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\14\71ee07f2a4d9c3fcf115dbc2a210695fd09b8f]
+
+
+--- .git\objects\16\e24e544bfdbf8a406b5f93cab2a481662e1ffc ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\16\e24e544bfdbf8a406b5f93cab2a481662e1ffc]
+
+
+--- .git\objects\23\9e311aeb91225fc61094ea83bdbf431d921d90 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\23\9e311aeb91225fc61094ea83bdbf431d921d90]
+
+
+--- .git\objects\26\bae5d9cf0959b8cce45e2e8b55fbb75219de21 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\26\bae5d9cf0959b8cce45e2e8b55fbb75219de21]
+
+
+--- .git\objects\2a\486587c63bc0f53da12a0da5ea7925652b2e48 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\2a\486587c63bc0f53da12a0da5ea7925652b2e48]
+
+
+--- .git\objects\2e\12e0b978885d8942edd2ca968efd63146c6b92 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\2e\12e0b978885d8942edd2ca968efd63146c6b92]
+
+
+--- .git\objects\34\675cd30bcb39490310b758fb1bd82a5f6805ac ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\34\675cd30bcb39490310b758fb1bd82a5f6805ac]
+
+
+--- .git\objects\41\04e6c13117e65b909ce17d7aade8ae9210bb24 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\41\04e6c13117e65b909ce17d7aade8ae9210bb24]
+
+
+--- .git\objects\43\d1eda31cb5c4e1121b01c36835d5114a324017 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\43\d1eda31cb5c4e1121b01c36835d5114a324017]
+
+
+--- .git\objects\45\25b6fc86a652a2cb7321f4fcf82fbe2e422972 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\45\25b6fc86a652a2cb7321f4fcf82fbe2e422972]
+
+
+--- .git\objects\46\15de3b9d7833b728f4b9c82ed47b9bd57c7201 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\46\15de3b9d7833b728f4b9c82ed47b9bd57c7201]
+
+
+--- .git\objects\4c\de1ecf10f39c76e4f1da84882684f9a8008867 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\4c\de1ecf10f39c76e4f1da84882684f9a8008867]
+
+
+--- .git\objects\4d\c93eec9801935bf154d8b28d0383610860d63e ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\4d\c93eec9801935bf154d8b28d0383610860d63e]
+
+
+--- .git\objects\56\7b3c98dabcf2a58be198a6b0107b21803079c4 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\56\7b3c98dabcf2a58be198a6b0107b21803079c4]
+
+
+--- .git\objects\61\e7e5066d97877a8af997135ea937824e3c1a5f ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\61\e7e5066d97877a8af997135ea937824e3c1a5f]
+
+
+--- .git\objects\65\0af1954b2b00871247609011814d62eea0139c ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\65\0af1954b2b00871247609011814d62eea0139c]
+
+
+--- .git\objects\6b\ff1e646cc55ed8eb481c3425eb1fd7bb0e3466 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\6b\ff1e646cc55ed8eb481c3425eb1fd7bb0e3466]
+
+
+--- .git\objects\77\64bb87c87c23ba9c56d13da3083ee20d3820da ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\77\64bb87c87c23ba9c56d13da3083ee20d3820da]
+
+
+--- .git\objects\77\829259a29d295bee38d2b315597056ffa5e53b ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\77\829259a29d295bee38d2b315597056ffa5e53b]
+
+
+--- .git\objects\78\e9b4fb37aff83a7a8f91c2be91f0395ce4d0df ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\78\e9b4fb37aff83a7a8f91c2be91f0395ce4d0df]
+
+
+--- .git\objects\80\31dcbba2701ed0e942f1520edc1d9ac8dd6ecc ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\80\31dcbba2701ed0e942f1520edc1d9ac8dd6ecc]
+
+
+--- .git\objects\82\7c09dcdf4f5ce76fa168f25f7fee424011d970 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\82\7c09dcdf4f5ce76fa168f25f7fee424011d970]
+
+
+--- .git\objects\83\e8ba967aae73ca10c74553009d4f9163ac8b15 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\83\e8ba967aae73ca10c74553009d4f9163ac8b15]
+
+
+--- .git\objects\9b\a831c1dbf67ececf0c22420f95236df7028527 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\9b\a831c1dbf67ececf0c22420f95236df7028527]
+
+
+--- .git\objects\9c\4a212a18ea20add608c7f891c2324c3ca8eddf ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\9c\4a212a18ea20add608c7f891c2324c3ca8eddf]
+
+
+--- .git\objects\9d\e233316ee9a06afdc1f30cc2e85ba297306d2a ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\9d\e233316ee9a06afdc1f30cc2e85ba297306d2a]
+
+
+--- .git\objects\a0\4fe408cecda1e6af8d1df92b24b56907a2a1cf ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a0\4fe408cecda1e6af8d1df92b24b56907a2a1cf]
+
+
+--- .git\objects\a2\5a51b182bf0a5ded90acf09d72b785c7902cfc ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a2\5a51b182bf0a5ded90acf09d72b785c7902cfc]
+
+
+--- .git\objects\a3\0ce3cf4ed5fc078b22b6f7231328a0ddeda489 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a3\0ce3cf4ed5fc078b22b6f7231328a0ddeda489]
+
+
+--- .git\objects\a3\13cfc6b2e614cd3737707af1d8c8100fd5cd7e ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a3\13cfc6b2e614cd3737707af1d8c8100fd5cd7e]
+
+
+--- .git\objects\a3\8005155c7e0c5c05cc1eebafbdaa6b1cd0ae8c ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a3\8005155c7e0c5c05cc1eebafbdaa6b1cd0ae8c]
+
+
+--- .git\objects\a3\bdb7079331fe28775484221eb0eefbf7381993 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a3\bdb7079331fe28775484221eb0eefbf7381993]
+
+
+--- .git\objects\a6\d05885d6dcb561d09676aec245e2e025ba8af2 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a6\d05885d6dcb561d09676aec245e2e025ba8af2]
+
+
+--- .git\objects\a9\2456fccbb7dffaa39e356b0d77d1c278afe12c ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\a9\2456fccbb7dffaa39e356b0d77d1c278afe12c]
+
+
+--- .git\objects\ab\c900a41767cb59ad2b32212ac4d2687423ee99 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\ab\c900a41767cb59ad2b32212ac4d2687423ee99]
+
+
+--- .git\objects\bb\bb91bc1a89f6c58c4e8d09cdcd1ce7d07a16c4 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\bb\bb91bc1a89f6c58c4e8d09cdcd1ce7d07a16c4]
+
+
+--- .git\objects\bb\d85b900b8da3f0fb4de8fc0fc47155197eb407 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\bb\d85b900b8da3f0fb4de8fc0fc47155197eb407]
+
+
+--- .git\objects\bd\e5782f0dbc9fb5e7acc6d8dbd0c545bf50ab87 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\bd\e5782f0dbc9fb5e7acc6d8dbd0c545bf50ab87]
+
+
+--- .git\objects\c1\90ef67947f88e9ec45cf0ae23d80e979589473 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\c1\90ef67947f88e9ec45cf0ae23d80e979589473]
+
+
+--- .git\objects\c7\4d4514e796f668cf8c8446894d891d823f8a6e ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\c7\4d4514e796f668cf8c8446894d891d823f8a6e]
+
+
+--- .git\objects\ca\088be94c0a5edfaf05e261f0e39860edb8e430 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\ca\088be94c0a5edfaf05e261f0e39860edb8e430]
+
+
+--- .git\objects\d0\cd3a80b66e6ebf303b4b24d49ce935e131b54e ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\d0\cd3a80b66e6ebf303b4b24d49ce935e131b54e]
+
+
+--- .git\objects\d6\cf02534351a073da02ec98bad020ac644186f2 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\d6\cf02534351a073da02ec98bad020ac644186f2]
+
+
+--- .git\objects\d9\8fc6f09c2b24e082400983ed841ea7d3d78bf2 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\d9\8fc6f09c2b24e082400983ed841ea7d3d78bf2]
+
+
+--- .git\objects\e1\e3ce2feeb0c465a127b84f7db7894263119d27 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\e1\e3ce2feeb0c465a127b84f7db7894263119d27]
+
+
+--- .git\objects\e6\9de29bb2d1d6434b8b29ae775ad8c2e48c5391 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\e6\9de29bb2d1d6434b8b29ae775ad8c2e48c5391]
+
+
+--- .git\objects\eb\ffd6a5d0427b896291ff08cca13eb7d12dc25f ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\eb\ffd6a5d0427b896291ff08cca13eb7d12dc25f]
+
+
+--- .git\objects\f2\43fd007859c8f048f2d84a4b5cdb72b562c514 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\f2\43fd007859c8f048f2d84a4b5cdb72b562c514]
+
+
+--- .git\objects\f3\757168d8d4b2bdeb7c3fe14343df241cab567c ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\f3\757168d8d4b2bdeb7c3fe14343df241cab567c]
+
+
+--- .git\objects\fd\4a1cfc4d9746fa5914a5bb87170b23311ffdf7 ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\fd\4a1cfc4d9746fa5914a5bb87170b23311ffdf7]
+
+
+--- .git\objects\fe\8e3d46c4751cc0b4fd9f5d7841a7dd1a78085e ---
+[Could not read file: C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent\.git\objects\fe\8e3d46c4751cc0b4fd9f5d7841a7dd1a78085e]
+
+
+--- .git\refs\heads\main ---
+f243fd007859c8f048f2d84a4b5cdb72b562c514
+
+
+--- .git\refs\remotes\origin\main ---
+f243fd007859c8f048f2d84a4b5cdb72b562c514
+
+
+--- configs\sfx_agent.yml ---
+# sfx_agent.yml
+# Default settings for SamplePackAgent
+
+# ElevenLabs sound‑effects model & voice
+elevenlabs:
+  voice: "sound_effects"
+  model: "eleven_multisfx_v1"
+
+# Ollama/Gemma settings
+gemma:
+  model: "gemma3:12b"
+
+# Output settings
+output:
+  folder: "./output_sfx"
+  file_format: "wav"
+
+# Prompt defaults
+prompt:
+  default_duration: 1.5       # seconds
+  prompt_influence: 0.8       # 0.0–1.0
+  batch_influences: [0.6, 0.8, 1.0]
+
+# Logging
+logging:
+  level: INFO
+
+
+--- docs\architecture.md ---
+# architecture.md
+
+
+--- docs\usage.md ---
+# usage.md
+
+
+--- scripts\run_agent.py ---
+# run_agent.py
+from sfx_agent.config import Config
+import logging
+
+def main():
+    cfg = Config("configs/sfx_agent.yml")
+    logging.basicConfig(level=cfg._cfg["logging"]["level"])
+    print("✔ ElevenLabs voice:", cfg.eleven_voice)
+    print("✔ ElevenLabs model:", cfg.eleven_model)
+    print("✔ Gemma model:", cfg.gemma_model)
+    print("✔ Output folder:", cfg.output_folder)
+    print("✔ Default duration:", cfg.default_duration)
+    print("✔ Batch influences:", cfg.batch_influences)
+
+if __name__ == "__main__":
+    main()
+
+
+--- scripts\__init__.py ---
+
+
+--- sfx_agent\composer.py ---
+# File: sfx_agent/composer.py
+
+# TODO: Integrate Jinja2 templating for more flexible prompt templates
+# TODO: Add parameter validation to ensure all required keys are present
+# TODO: Allow custom templates via config or user override
+
+from typing import Dict
+
+DEFAULT_TEMPLATE = (
+    "{source}: a {timbre} sound; {dynamics}, {duration}s, "
+    "{pitch}; {space}; like {analogy}."
+)
+
+def compose_prompt(params: Dict[str, any], template: str = None) -> str:
+    """
+    Build a text-to-audio prompt from structured parameters.
+
+    Args:
+        params: Dict containing keys:
+            - source (str)
+            - timbre (str)
+            - dynamics (str)
+            - duration (float or int)
+            - pitch (str)
+            - space (str)
+            - analogy (str)
+        template: Optional override string with Python format fields.
+
+    Returns:
+        Fully formatted prompt string.
+    """
+    # TODO: Validate that params contains all required fields
+    tpl = template or DEFAULT_TEMPLATE
+
+    return tpl.format(
+        source=params["source"],
+        timbre=params["timbre"],
+        dynamics=params["dynamics"],
+        duration=params["duration"],
+        pitch=params["pitch"],
+        space=params["space"],
+        analogy=params["analogy"],
+    )
+
+
+--- sfx_agent\config.py ---
+# File: sfx_agent/config.py
+
+# TODO: Add logging to record loaded config values and validation steps
+# TODO: Support environment variable overrides (e.g., via python-dotenv)
+# TODO: Cache the loaded config so repeated instantiations are fast
+# TODO: Validate types (e.g., durations are numeric, batch_influences is a list of floats)
+
+import os
+from pathlib import Path
+from ruamel.yaml import YAML
+
+class ConfigError(Exception):
+    """Raised when config file is missing or invalid."""
+    pass
+
+class Config:
+    def __init__(self, path: str = None):
+        """
+        Load and validate the YAML config for the SFX agent.
+        
+        Args:
+            path: Optional path to the config file. Defaults to 'configs/sfx_agent.yml'.
+        
+        Raises:
+            FileNotFoundError: If the config file does not exist.
+            ConfigError: If required keys are missing or invalid.
+        """
+        yaml = YAML(typ="safe")
+        cfg_path = Path(path or "configs/sfx_agent.yml")
+        if not cfg_path.exists():
+            raise FileNotFoundError(f"Config file not found: {cfg_path}")
+        self._cfg = yaml.load(cfg_path)
+        self._validate()
+
+    def _validate(self):
+        """
+        Ensure that all required sections and keys are present in the config.
+        Raises ConfigError on missing entries.
+        """
+        required = {
+            "elevenlabs": ["voice", "model"],
+            "gemma": ["model"],
+            "output": ["folder", "file_format"],
+            "prompt": ["default_duration", "prompt_influence", "batch_influences"],
+        }
+        missing = []
+        for section, keys in required.items():
+            sec = self._cfg.get(section, {})
+            for key in keys:
+                if sec.get(key) is None:
+                    missing.append(f"{section}.{key}")
+        if missing:
+            raise ConfigError(f"Missing config entries: {missing}")
+
+    @property
+    def eleven_voice(self) -> str:
+        return self._cfg["elevenlabs"]["voice"]
+
+    @property
+    def eleven_model(self) -> str:
+        return self._cfg["elevenlabs"]["model"]
+
+    @property
+    def gemma_model(self) -> str:
+        return self._cfg["gemma"]["model"]
+
+    @property
+    def output_folder(self) -> Path:
+        folder = Path(self._cfg["output"]["folder"])
+        # TODO: Optionally create the folder if it doesn't exist
+        return folder
+
+    @property
+    def output_format(self) -> str:
+        return self._cfg["output"]["file_format"]
+
+    @property
+    def default_duration(self) -> float:
+        return float(self._cfg["prompt"]["default_duration"])
+
+    @property
+    def prompt_influence(self) -> float:
+        return float(self._cfg["prompt"]["prompt_influence"])
+
+    @property
+    def batch_influences(self) -> list[float]:
+        return [float(x) for x in self._cfg["prompt"]["batch_influences"]]
+
+
+--- sfx_agent\decomposer.py ---
+# File: sfx_agent/decomposer.py
+
+# TODO: Add logging statements to trace subprocess calls and outputs
+# TODO: Implement retry logic for transient Ollama CLI failures
+# TODO: Cache Gemma3 responses to avoid redundant calls for the same brief
+
+import subprocess
+import json
+from .config import Config
+
+class DecomposerError(Exception):
+    """Raised when Gemma3 fails or returns invalid or unexpected output."""
+    pass
+
+def call_gemma(prompt: str, model: str | None = None) -> dict:
+    """
+    Invoke Ollama's Gemma3 model to parse an SFX brief into structured JSON parameters.
+
+    Args:
+        prompt: The instruction and brief text for Gemma3.
+        model: Optional override of the Gemma3 model name from config.
+
+    Returns:
+        A dict parsed from Gemma3's JSON output.
+
+    Raises:
+        DecomposerError: On subprocess failure or invalid JSON.
+    """
+    # TODO: Add a timeout to the subprocess call for safety
+    cfg = Config()
+    model_name = model or cfg.gemma_model
+    cmd = [
+        "ollama", "eval", model_name,
+        "--json",              # Request JSON output
+        "--prompt", prompt     # Provide instruction and brief
+    ]
+    try:
+        # TODO: Log the full cmd for debugging
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        text = output.decode("utf-8")
+        # TODO: Validate JSON structure contains expected keys
+        return json.loads(text)
+    except subprocess.CalledProcessError as e:
+        # TODO: Log error output before raising
+        msg = e.output.decode("utf-8", errors="ignore")
+        raise DecomposerError(f"Gemma3 call failed: {msg}") from e
+    except json.JSONDecodeError as e:
+        # TODO: Include raw text in error for debugging
+        raise DecomposerError(f"Invalid JSON from Gemma3: {text}") from e
+
+def decompose_brief(brief: str) -> dict:
+    """
+    Convert a free-form SFX brief into structured parameters by instructing Gemma3.
+
+    Args:
+        brief: The user-provided description of the desired sound.
+
+    Returns:
+        A dict with keys: source, timbre, dynamics, duration, pitch,
+        space, analogy, prompt_influence, batch_influences.
+    """
+    # TODO: Extend instruction to include examples for better parsing
+    instruction = (
+        "Decompose this SFX brief into JSON with keys: "
+        "source, timbre, dynamics, duration, pitch, space, analogy, "
+        "prompt_influence, batch_influences. "
+        f"Brief: \"{brief}\""
+    )
+    return call_gemma(instruction)
+
+
+--- sfx_agent\feedback.py ---
+# File: sfx_agent/feedback.py
+
+# TODO: Add logging for feedback requests and responses
+# TODO: Refine instruction template for more precise improvement suggestions
+# TODO: Support configurable thresholds to trigger feedback only when metrics exceed limits
+
+from .config import Config
+from .decomposer import call_gemma, DecomposerError
+
+class FeedbackError(Exception):
+    """Raised when the feedback process fails."""
+    pass
+
+def request_feedback(prompt: str, metrics: dict) -> dict:
+    """
+    Send the original prompt and audio metrics to Gemma3, requesting suggestions
+    to improve the prompt for better sound-effect output.
+
+    Args:
+        prompt: The text-to-audio prompt used to generate the SFX.
+        metrics: A dict of audio quality metrics (e.g., LUFS, peak dBFS).
+
+    Returns:
+        A dict containing Gemma3's structured feedback (e.g., suggested tweaks).
+
+    Raises:
+        FeedbackError: On failure to obtain or parse feedback.
+    """
+    cfg = Config()
+    model_name = cfg.gemma_model
+    # TODO: Move instruction template to config or constants
+    instruction = (
+        "You are an assistant that improves sound-effect prompts. "
+        "Given the following text-to-audio prompt and audio metrics, "
+        "suggest precise adjustments to optimize the sound quality.\n"
+        f"Prompt: \"{prompt}\"\n"
+        f"Metrics: {metrics}"
+    )
+    try:
+        feedback = call_gemma(instruction, model=model_name)
+        # TODO: Validate that feedback contains meaningful fields
+        return feedback
+    except DecomposerError as e:
+        # TODO: Log the error details
+        raise FeedbackError(f"Feedback request failed: {e}") from e
+
+
+--- sfx_agent\generator.py ---
+# File: sfx_agent/generator.py
+
+# TODO: Add retry/backoff for ElevenLabs API failures
+# TODO: Sanitize prompt text when generating filenames to avoid filesystem issues
+# TODO: Support configurable output formats (wav/mp3) via config
+
+import os
+from pathlib import Path
+from elevenlabs.client import ElevenLabs
+from .config import Config
+
+def generate_audio(
+    prompt: str,
+    duration: float,
+    prompt_influence: float,
+    config: Config
+) -> Path:
+    """
+    Call ElevenLabs to generate an SFX clip and save to disk.
+
+    Args:
+        prompt: The fully formatted text prompt.
+        duration: Target length in seconds.
+        prompt_influence: Literal vs. creative control (0.0–1.0).
+        config: Loaded Config instance.
+
+    Returns:
+        Path to the saved audio file.
+    """
+    client = ElevenLabs()  # TODO: pass api_key if required
+    voice_id = config.eleven_voice
+    model_id = config.eleven_model
+    out_dir = config.output_folder
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build a safe filename
+    safe = "".join(c if c.isalnum() or c in ("_", "-") else "_" for c in prompt)[:50]
+    filename = f"{safe}_{duration:.2f}_{prompt_influence:.2f}.{config.output_format}"
+    out_path = out_dir / filename
+
+    # TODO: Check for existing file and handle naming collisions
+    # Generate audio bytes
+    audio_bytes = client.text_to_speech.convert(
+        text=prompt,
+        voice_id=voice_id,
+        model_id=model_id,
+        output_format=config.output_format,
+    )
+    # Save to disk
+    with open(out_path, "wb") as f:
+        f.write(audio_bytes)
+    return out_path
+
+
+--- sfx_agent\input_handler.py ---
+# File: sfx_agent/input_handler.py
+
+# TODO: Add logging for received arguments and interactive prompts
+# TODO: Validate that the config file path exists and is readable
+# TODO: Allow loading multiple briefs from a file via an option
+# TODO: Consider migrating to Click for richer CLI interface
+
+import argparse
+from typing import Tuple
+
+def parse_args() -> Tuple[str, str]:
+    """
+    Parse command‑line arguments for the SFX agent.
+
+    Returns:
+        brief_text: The user‑provided SFX brief (or prompted interactively).
+        config_path: Path to the YAML config file.
+    """
+    parser = argparse.ArgumentParser(
+        description="Generate sound effects from a text brief using SamplePackAgent."
+    )
+    parser.add_argument(
+        'brief',
+        nargs='*',
+        help='SFX brief description (words). If omitted, you will be prompted.'
+    )
+    parser.add_argument(
+        '-c', '--config',
+        default='configs/sfx_agent.yml',
+        help='Path to the YAML config file'
+    )
+
+    args = parser.parse_args()
+
+    # Determine brief text
+    if args.brief:
+        brief_text = ' '.join(args.brief)
+    else:
+        # TODO: Handle KeyboardInterrupt if user cancels input
+        brief_text = input("Describe your SFX brief: ")
+
+    return brief_text, args.config
+
+
+--- sfx_agent\library.py ---
+# File: sfx_agent/library.py
+
+# TODO: Make library file path configurable via Config
+# TODO: Add thread‑safe locking to prevent concurrent write conflicts
+# TODO: Validate that each result dict contains required keys
+
+from pathlib import Path
+from ruamel.yaml import YAML
+
+
+def add_to_library(brief: str, results: list[dict], path: str = None) -> Path:
+    """
+    Append a list of result entries under the given brief in a YAML library file.
+
+    Args:
+        brief: The original SFX brief text.
+        results: A list of dicts, each containing metadata like 'path', 'peak_dB', etc.
+        path: Optional path to the YAML library file (defaults to 'prompt_library.yml').
+
+    Returns:
+        The Path to the library file.
+    """
+    yaml = YAML(typ="safe")
+    lib_path = Path(path or "prompt_library.yml")
+
+    # Load existing data or start fresh
+    if lib_path.exists():
+        # Read YAML from file
+        with lib_path.open("r") as f:
+            data = yaml.load(f) or {}
+    else:
+        data = {}
+
+    # Append or initialize the list for this brief
+    existing = data.setdefault(brief, [])
+    existing.extend(results)
+
+    # Write back to disk
+    lib_path.parent.mkdir(parents=True, exist_ok=True)
+    with lib_path.open("w") as f:
+        yaml.dump(data, f)
+
+    return lib_path
+
+
+--- sfx_agent\post_processor.py ---
+# post_processor.py
+
+
+--- sfx_agent\runner.py ---
+# runner.py
+
+
+--- sfx_agent\__init__.py ---
+# __init__.py
+
+
+--- tests\test_composer.py ---
+# File: tests/test_composer.py
+
+# TODO: Add tests for missing keys and template override
+# TODO: Parametrize with multiple templates and param sets
+
+import pytest
+from sfx_agent.composer import compose_prompt, DEFAULT_TEMPLATE
+
+@pytest.fixture
+def sample_params():
+    return {
+        "source": "rusty metal door",
+        "timbre": "sharp, metallic",
+        "dynamics": "fast attack, short decay",
+        "duration": 1.2,
+        "pitch": "low-frequency",
+        "space": "medium hall reverb",
+        "analogy": "camera shutter click",
+    }
+
+def test_compose_uses_default_template(sample_params):
+    prompt = compose_prompt(sample_params)
+    expected = (
+        "rusty metal door: a sharp, metallic sound; fast attack, short decay, "
+        "1.2s, low-frequency; medium hall reverb; like camera shutter click."
+    )
+    assert prompt == expected
+
+def test_compose_with_custom_template(sample_params):
+    custom_tpl = "Make a {duration}s {source} with {dynamics}"
+    prompt = compose_prompt(sample_params, template=custom_tpl)
+    expected = "Make a 1.2s rusty metal door with fast attack, short decay"
+    assert prompt == expected
+
+def test_compose_missing_key_raises_key_error(sample_params):
+    bad_params = sample_params.copy()
+    bad_params.pop("space")
+    with pytest.raises(KeyError):
+        compose_prompt(bad_params)
+
+
+--- tests\test_config.py ---
+# test_config.py
+# File: tests/test_config.py
+
+# TODO: Add tests for environment variable overrides
+# TODO: Test behavior when output folder does not exist
+# TODO: Parametrize invalid types (e.g., non-numeric durations)
+
+import pytest
+import os
+from pathlib import Path
+from ruamel.yaml import YAML
+
+from sfx_agent.config import Config, ConfigError
+
+VALID_YAML = """
+elevenlabs:
+  voice: "sound_effects"
+  model: "eleven_multisfx_v1"
+
+gemma:
+  model: "gemma3:12b"
+
+output:
+  folder: "./out_sfx"
+  file_format: "wav"
+
+prompt:
+  default_duration: 2.0
+  prompt_influence: 0.75
+  batch_influences: [0.5, 0.8, 1.0]
+"""
+
+MISSING_YAML = """
+elevenlabs:
+  voice: "sound_effects"
+
+gemma:
+  model: "gemma3:12b"
+
+output:
+  folder: "./out_sfx"
+
+prompt:
+  default_duration: 2.0
+"""
+
+def write_yaml(tmp_path: Path, content: str) -> Path:
+    cfg_file = tmp_path / "config.yml"
+    cfg_file.write_text(content)
+    return cfg_file
+
+def test_load_valid_config(tmp_path, monkeypatch):
+    cfg_path = write_yaml(tmp_path, VALID_YAML)
+    # Monkeypatch default path
+    monkeypatch.chdir(tmp_path)
+    cfg = Config("config.yml")
+    assert cfg.eleven_voice == "sound_effects"
+    assert cfg.eleven_model == "eleven_multisfx_v1"
+    assert cfg.gemma_model == "gemma3:12b"
+    assert cfg.output_folder == Path("./out_sfx")
+    assert cfg.output_format == "wav"
+    assert cfg.default_duration == 2.0
+    assert cfg.prompt_influence == 0.75
+    assert cfg.batch_influences == [0.5, 0.8, 1.0]
+
+def test_missing_config_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        Config(str(tmp_path / "nonexistent.yml"))
+
+def test_missing_required_keys(tmp_path, monkeypatch):
+    cfg_path = write_yaml(tmp_path, MISSING_YAML)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    assert "elevenlabs.model" in msg
+    assert "output.file_format" in msg
+    assert "prompt.prompt_influence" in msg
+
+def test_invalid_type_for_duration(tmp_path, monkeypatch):
+    bad_yaml = VALID_YAML.replace("2.0", "\"two\"")
+    cfg_path = write_yaml(tmp_path, bad_yaml)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError):
+        Config("config.yml").default_duration  # conversion to float should fail
+
+
+--- tests\test_decomposer.py ---
+# File: tests/test_decomposer.py
+
+# TODO: Add tests for timeout handling
+# TODO: Include integration tests mocking Ollama responses
+# TODO: Parametrize for different prompt variations
+
+import subprocess
+import json
+import pytest
+
+from sfx_agent.decomposer import call_gemma, decompose_brief, DecomposerError
+
+def test_call_gemma_success(monkeypatch):
+    fake_output = {"source": "door slam", "timbre": "sharp"}
+
+    def fake_check_output(cmd, stderr):
+        # Simulate successful JSON output from Gemma3
+        return json.dumps(fake_output).encode("utf-8")
+
+    monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+    result = call_gemma("any prompt", model="gemma3:1b")
+    assert result == fake_output
+
+def test_call_gemma_subprocess_error(monkeypatch):
+    def fake_fail(cmd, stderr):
+        # Simulate a called process error
+        raise subprocess.CalledProcessError(1, cmd, output=b"error details")
+
+    monkeypatch.setattr(subprocess, "check_output", fake_fail)
+    with pytest.raises(DecomposerError) as exc:
+        call_gemma("bad prompt", model="gemma3:1b")
+    assert "error details" in str(exc.value)
+
+def test_call_gemma_invalid_json(monkeypatch):
+    def fake_bad_json(cmd, stderr):
+        # Simulate non-JSON output
+        return b"not a JSON"
+
+    monkeypatch.setattr(subprocess, "check_output", fake_bad_json)
+    with pytest.raises(DecomposerError) as exc:
+        call_gemma("non-json output", model="gemma3:1b")
+    assert "Invalid JSON" in str(exc.value)
+
+def test_decompose_brief_uses_call_gemma(monkeypatch):
+    dummy = {"foo": "bar"}
+    # Ensure decompose_brief delegates to call_gemma
+    monkeypatch.setattr("sfx_agent.decomposer.call_gemma", lambda p: dummy)
+    result = decompose_brief("test brief")
+    assert result is dummy
+
+
+--- tests\test_feedback.py ---
+# File: tests/test_feedback.py
+
+# TODO: Add tests for malformed metrics input
+# TODO: Test scenario where no suggestions are returned
+# TODO: Parametrize with different prompt and metrics combinations
+
+import pytest
+
+from sfx_agent.feedback import request_feedback, FeedbackError
+
+class DummyConfig:
+    # stub Config to satisfy import in feedback
+    gemma_model = "gemma3:1b"
+
+@pytest.fixture(autouse=True)
+def patch_config(monkeypatch):
+    # Monkeypatch Config to return dummy config in feedback module
+    monkeypatch.setattr('sfx_agent.feedback.Config', lambda *args, **kwargs: DummyConfig())
+
+def test_request_feedback_success(monkeypatch):
+    dummy_response = {"suggestion": "Increase prompt_influence to 0.9"}
+    # Stub call_gemma to return dummy feedback
+    monkeypatch.setattr('sfx_agent.feedback.call_gemma', lambda prompt, model=None: dummy_response)
+
+    result = request_feedback("door slam prompt", {"peak_dB": -1.2, "lufs": -23.5})
+    assert result == dummy_response
+
+def test_request_feedback_failure(monkeypatch):
+    # Stub call_gemma to raise DecomposerError
+    from sfx_agent.decomposer import DecomposerError
+    def fake_fail(prompt, model=None):
+        raise DecomposerError("oops error")
+    monkeypatch.setattr('sfx_agent.feedback.call_gemma', fake_fail)
+
+    with pytest.raises(FeedbackError) as exc:
+        request_feedback("test prompt", {"peak_dB": 0})
+    assert "Feedback request failed" in str(exc.value)
+
+
+--- tests\test_generator.py ---
+# File: tests/test_generator.py
+
+# TODO: Add tests for collision handling when file exists
+# TODO: Test behavior with unsupported output formats
+
+import pytest
+from pathlib import Path
+from elevenlabs.client import ElevenLabs
+
+from sfx_agent.generator import generate_audio
+
+class DummyConfig:
+    """Minimal stand‑in for Config."""
+    def __init__(self, out_dir: Path, fmt="wav"):
+        self.eleven_voice = "sound_effects"
+        self.eleven_model = "eleven_multisfx_v1"
+        self.output_folder = out_dir
+        self.output_format = fmt
+
+class FakeClient:
+    """Stub ElevenLabs client."""
+    def __init__(self):
+        self.calls = []
+
+    class text_to_speech:
+        @staticmethod
+        def convert(text, voice_id, model_id, output_format):
+            # validate inputs
+            assert text == "test prompt"
+            assert voice_id == "sound_effects"
+            assert model_id == "eleven_multisfx_v1"
+            assert output_format == "wav"
+            return b"AUDIOBYTES"
+
+@pytest.fixture(autouse=True)
+def patch_client(monkeypatch):
+    # Replace ElevenLabs with our fake
+    monkeypatch.setattr("sfx_agent.generator.ElevenLabs", lambda: FakeClient())
+    return
+
+def test_generate_audio_creates_file(tmp_path):
+    cfg = DummyConfig(tmp_path)
+    out_path = generate_audio("test prompt", 1.5, 0.7, cfg)
+    assert out_path.exists()
+    assert out_path.read_bytes() == b"AUDIOBYTES"
+
+def test_invalid_output_format(tmp_path):
+    cfg = DummyConfig(tmp_path, fmt="exe")
+    with pytest.raises(Exception):
+        # we expect convert to raise or our code to error on bad format
+        generate_audio("p", 1.0, 0.5, cfg)
+
+
+--- tests\test_input_handler.py ---
+# File: tests/test_input_handler.py
+
+# TODO: Add tests for invalid config paths and file‑based inputs
+# TODO: Parametrize tests for multiple argument orders
+# TODO: Test behavior when user hits Enter without typing a brief
+
+import sys
+import pytest
+
+from sfx_agent.input_handler import parse_args
+
+def test_parse_args_with_brief_and_config(monkeypatch):
+    # Simulate: script.py foo bar -c custom_config.yml
+    monkeypatch.setattr(sys, 'argv', ['script.py', 'foo', 'bar', '-c', 'custom_config.yml'])
+    brief, config = parse_args()
+    assert brief == 'foo bar'
+    assert config == 'custom_config.yml'
+
+def test_parse_args_with_brief_default_config(monkeypatch):
+    # Simulate: script.py hello world
+    monkeypatch.setattr(sys, 'argv', ['script.py', 'hello', 'world'])
+    brief, config = parse_args()
+    assert brief == 'hello world'
+    assert config == 'configs/sfx_agent.yml'
+
+def test_parse_args_interactive(monkeypatch):
+    # Simulate: script.py (no args) and input from user
+    monkeypatch.setattr(sys, 'argv', ['script.py'])
+    monkeypatch.setattr('builtins.input', lambda prompt: 'typed brief')
+    brief, config = parse_args()
+    assert brief == 'typed brief'
+    assert config == 'configs/sfx_agent.yml'
+
+
+--- tests\test_library.py ---
+# File: tests/test_library.py
+
+# TODO: Test behavior when results list is empty
+# TODO: Test that invalid YAML in existing file raises a clear error
+# TODO: Parametrize with multiple briefs and verify isolation
+
+import pytest
+from pathlib import Path
+from ruamel.yaml import YAML
+
+from sfx_agent.library import add_to_library
+
+@pytest.fixture
+def yaml_loader():
+    return YAML(typ="safe")
+
+def test_add_to_new_library(tmp_path, yaml_loader):
+    lib_file = tmp_path / "lib.yml"
+    brief = "my test brief"
+    results = [{"path": "a.wav", "peak_dB": -1.0}]
+    out_path = add_to_library(brief, results, path=str(lib_file))
+    assert out_path == lib_file
+    assert lib_file.exists()
+
+    data = yaml_loader.load(lib_file)
+    assert brief in data
+    assert data[brief] == results
+
+def test_append_to_existing(tmp_path, yaml_loader):
+    lib_file = tmp_path / "lib.yml"
+    initial = {"my test brief": [{"path": "a.wav", "peak_dB": -1.0}]}
+    yaml_loader.dump(initial, lib_file.open("w"))
+
+    new_results = [{"path": "b.wav", "peak_dB": -2.0}]
+    add_to_library("my test brief", new_results, path=str(lib_file))
+
+    data = yaml_loader.load(lib_file)
+    assert data["my test brief"] == initial["my test brief"] + new_results
+
+def test_library_creates_parent_dirs(tmp_path, yaml_loader):
+    nested = tmp_path / "nested" / "dir" / "lib.yml"
+    assert not nested.exists()
+
+    add_to_library("brief", [], path=str(nested))
+    assert nested.exists()
+
+    data = yaml_loader.load(nested)
+    assert data == {"brief": []}
+
+
+--- tests\test_post_processor.py ---
+# test_post_processor.py
+
+
+--- tests\__init__.py ---
+
+
