@@ -6,7 +6,7 @@ Generates:
   1) A plaintext dump of the entire codebase (codebase.txt)
   2) A directory tree listing (tree.txt)
 
-Ignores patterns from .gitignore plus any “venv” directory.
+Ignores patterns from .gitignore plus any “venv” or “.git” directories.
 """
 
 import os
@@ -14,13 +14,15 @@ import fnmatch
 from pathlib import Path
 
 # ——————————————— CONFIG ————————————————
-# PROJECT ROOT and OUTPUT DIRECTORY both point to SamplePackAgent
-ROOT        = Path(r"C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent")
-IGNORE_FILE = ROOT / ".gitignore"
-EXTRA_IGNORES = ["venv/*", "*/venv/*"]
-OUT_DIR      = ROOT
-CODEBASE_DOC = OUT_DIR / "codebase.txt"
-TREE_DOC     = OUT_DIR / "tree.txt"
+ROOT          = Path(r"C:\Users\Earth\BEDROT PRODUCTIONS\SamplePackAgent")
+IGNORE_FILE   = ROOT / ".gitignore"
+EXTRA_IGNORES = [
+    "venv/*", "*/venv/*",
+    ".git/*", "*/.git/*"
+]
+OUT_DIR        = ROOT
+CODEBASE_DOC   = OUT_DIR / "codebase.txt"
+TREE_DOC       = OUT_DIR / "tree.txt"
 
 
 def load_ignore_patterns():
@@ -45,6 +47,8 @@ def write_codebase(patterns: list[str]):
     with CODEBASE_DOC.open("w", encoding="utf-8") as out:
         for root, dirs, files in os.walk(ROOT):
             rel_dir = os.path.relpath(root, ROOT)
+
+            # never descend into venv or .git
             if is_ignored(rel_dir + "/", patterns):
                 dirs[:] = []
                 continue
@@ -68,7 +72,11 @@ def write_tree(patterns: list[str]):
 
     def recurse(dir_path: Path, prefix=""):
         entries = sorted(dir_path.iterdir())
-        filtered = [e for e in entries if not is_ignored(str(e.relative_to(ROOT)), patterns)]
+        # filter out ignored entries (including .git)
+        filtered = [
+            e for e in entries
+            if not is_ignored(str(e.relative_to(ROOT)), patterns)
+        ]
         for i, entry in enumerate(filtered):
             connector = "└── " if i == len(filtered) - 1 else "├── "
             lines.append(f"{prefix}{connector}{entry.name}")
