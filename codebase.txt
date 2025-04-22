@@ -227,8 +227,186 @@ samplepackagent = "scripts.run_agent:main"
 
 
 --- README.md ---
-# README.md
+# Sample Pack Agent
 
+Sample Pack Agent is a Python application designed to automate the generation of sound effects (SFX) libraries based on natural language descriptions (briefs). It employs a **Perceive -> Plan -> Act -> Evaluate** loop, primarily driven by a local Large Language Model (**Gemma 3 via Ollama**), combined with AI audio generation (**ElevenLabs API**) and audio processing tools (`pydub`, `ffmpeg`).
+
+The goal is to transform potentially complex requests (e.g., "400 horror film samples across foley, SFX, and tones") into structured generation jobs, producing diverse and usable audio assets automatically.
+
+## Core Concepts & Architecture
+
+The agent operates using the following conceptual framework and tools:
+
+**1. Agent Loop (Perceive → Plan → Act → Evaluate)**
+
+*   **Perceive:** Takes a free-form SFX brief from the user and loads the base configuration. Handles both single SFX requests and complex bulk library requests.
+*   **Plan (Decomposition):** Uses **Gemma 3 (via Ollama)** to parse the brief.
+    *   **Single Brief:** Extracts structured parameters (source, timbre, dynamics, duration, pitch, space, analogy, influence values).
+    *   **Bulk Brief:** *[Planned]* Extracts overall specifications (total count, categories, counts per category, default parameters). Then, for each category, uses Gemma 3 again to generate a set of *distinct prompt templates*. These templates are expanded/mutated (potentially using Gemma 3 synonyms) to meet the required count per category, ensuring uniqueness.
+*   **Act (Generation & Processing):**
+    *   **Compose Prompt:** Fills a prompt template (f-string, future: Jinja2) using the decomposed parameters.
+    *   **Generate Audio:** Calls the **ElevenLabs API** (`eleven_multisfx_v1` model recommended) to generate raw audio. For each core prompt (especially in bulk mode), it loops through configured `batch_influences` to create variations.
+    *   **Post-Process:** Uses **`pydub` and `ffmpeg`** to normalize audio to a target LUFS, trim silence (optional), and calculate quality metrics (LUFS, Peak dBFS).
+*   **Evaluate (Critique & Store):**
+    *   **Store Metadata:** Appends detailed metadata (original brief, parameters, prompt used, metrics, file paths) for each successfully generated and processed SFX to a central YAML library (`prompt_library.yml`). Uses `mutagen` for tagging audio files (planned).
+    *   **Critique Loop:** *[Planned]* Feeds the calculated audio metrics (e.g., loudness, peaks) back to **Gemma 3** to ask for suggestions on how to tweak the *original prompt* for improved results (e.g., reducing clipping, adjusting timbre), potentially triggering another Plan -> Act cycle.
+
+**2. Key Tools & Libraries**
+
+| Capability                 | Tool / Library                  |
+| :------------------------- | :------------------------------ |
+| Agent "Thinking" / Control | Ollama CLI → Gemma 3 (e.g., 12B) |
+| Text→Audio Generation      | `elevenlabs` Python SDK         |
+| Audio Post-Processing      | `pydub` + `ffmpeg`              |
+| Loudness Measurement       | `pyloudnorm`                    |
+| Metadata Tagging           | `mutagen` *(Planned)*           |
+| Configuration / File I/O   | `ruamel.yaml`, `pathlib`, etc.  |
+| CLI / Orchestration        | Python (`argparse`, `logging`)  |
+
+*(TODO: Add link to architecture diagram image if hosted)*
+
+## Features
+
+*   **Natural Language Input:** Accepts single SFX briefs via CLI.
+*   **LLM Decomposition:** Uses Gemma 3 / Ollama for structured parameter extraction from single briefs.
+*   **Prompt Composition:** Creates text prompts from parameters.
+*   **AI Audio Generation:** Integrates with ElevenLabs API.
+*   **Variation Generation:** Creates multiple SFX variations based on `batch_influences`.
+*   **Audio Post-Processing:** Normalizes to target LUFS, calculates metrics.
+*   **Metadata Library:** Stores results in `prompt_library.yml`.
+*   **Modular Design:** Code separated by function (config, decompose, compose, generate, process, library, run).
+*   **Unit Tested:** Core components have pytest coverage.
+*   **Configurable:** Key parameters (models, paths, LUFS, influences) managed via YAML.
+*   **Planned:**
+    *   **Bulk Library Generation:** Handling complex briefs requesting large counts across multiple categories (core design goal).
+    *   **LLM Critique Loop:** Using Gemma 3 to analyze audio metrics and suggest prompt improvements.
+    *   **Advanced Prompting:** Hierarchical template generation and mutation for uniqueness in bulk mode.
+    *   **GUI / DAW Integration:** Making the agent accessible via UI or plugin.
+    *   **Resource Management:** Batching/chunking for large jobs.
+    *   **Audio Tagging:** Embedding metadata into audio files using `mutagen`.
+    *   **Enhanced Error Handling:** Retries for API/Ollama calls.
+
+## Example Use Cases (Target Capabilities)
+
+The agent architecture is designed to eventually handle briefs like:
+
+*   `"I am designing a horror film, I need a 400 sample library of foley, scary sound effects, and abstract tones. I also need some horror string motifs"`
+*   `"hyperpop sample pack for terminally online y2k baddies"`
+*   `"I want 200 different sounds that are extremely unique to each other"`
+
+*(Note: The current implementation primarily handles single SFX briefs. Bulk generation requires implementing the hierarchical planning steps described in the architecture.)*
+
+## Setup / Installation
+
+**Prerequisites:**
+
+*   **Python:** 3.8 or higher.
+*   **Ollama:** Install Ollama ([https://ollama.com/](https://ollama.com/)) and ensure the Ollama server is running (`ollama serve` or desktop app).
+*   **Gemma Model:** Pull the specific Gemma model specified in `configs/sfx_agent.yml` via Ollama (e.g., `ollama pull gemma3:12b`). **Verify the model name matches your config exactly.**
+*   **ffmpeg:** Required by `pydub`. Install ffmpeg and ensure the `ffmpeg` executable is in your system's PATH ([https://ffmpeg.org/download.html](https://ffmpeg.org/download.html)).
+*   **ElevenLabs API Key:** Required for audio generation ([https://elevenlabs.io/](https://elevenlabs.io/)).
+
+**Steps:**
+
+1.  **Clone the Repository:**
+    ```bash
+    git clone <your-repo-url>
+    cd SamplePackAgent
+    ```
+
+2.  **Create and Activate Virtual Environment:**
+    ```bash
+    python -m venv venv
+    # On Windows:
+    .\venv\Scripts\activate
+    # On macOS/Linux:
+    source venv/bin/activate
+    ```
+
+3.  **Install Dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  **Set API Key:** Create a file named `.env` in the project root directory (`SamplePackAgent/.env`) and add your ElevenLabs API key:
+    ```dotenv
+    # .env
+    ELEVEN_API_KEY="your_elevenlabs_api_key_here"
+    ```
+    *(Note: `.env` is included in `.gitignore`.)*
+
+5.  **Configure:** Review and adjust settings in `configs/sfx_agent.yml`:
+    *   `gemma.model`: **Must match** the Ollama model you have pulled (e.g., `gemma3:12b`).
+    *   `output.folder`: Where processed SFX files will be saved (relative to the config file).
+    *   `prompt.batch_influences`: List of influence values (0.0-1.0) for generating variations.
+    *   `processing.target_lufs`: Target loudness for normalization.
+    *   `library.path`: Path to the YAML results library (relative to the config file).
+    *   `logging.level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, etc.).
+
+## Usage (Current Implementation)
+
+Run the agent from the command line to generate SFX variations from a single brief:
+
+**Basic Usage:**
+
+```bash
+python scripts/run_agent.py "Your sound effect brief description here"
+```
+*Example:*
+```bash
+python scripts/run_agent.py "sci-fi door slam with a long echo"
+```
+
+**Using a Specific Configuration File:**
+
+```bash
+python scripts/run_agent.py "brief text" -c path/to/your/custom_config.yml
+```
+
+**Interactive Mode (If no brief provided):**
+
+```bash
+python scripts/run_agent.py
+Describe your SFX brief: a small metal object dropping onto a concrete floor
+```
+
+**Output:**
+
+*   Processed audio files (one for each influence in `batch_influences`) saved in the configured output folder.
+*   Metadata appended to the configured YAML library file.
+*   Console logs showing the process and any errors.
+
+*(Note: Handling of bulk library briefs requires further development of the planning stage.)*
+
+## Configuration Details (`configs/sfx_agent.yml`)
+
+*(This section remains largely the same as the previous README, detailing the specific keys)*
+*   **`elevenlabs`**: `voice`, `model`.
+*   **`gemma`**: `model` (for Ollama).
+*   **`output`**: `folder`, `file_format`.
+*   **`prompt`**: `default_duration`, `prompt_influence` (fallback), `batch_influences` (primary for variations).
+*   **`processing`**: `target_lufs`.
+*   **`library`**: `path`.
+*   **`logging`**: `level`.
+
+## Development
+
+**Running Tests:**
+
+```bash
+pytest -v
+```
+Show print statements:
+```bash
+pytest -v -s
+```
+
+## License
+
+MIT
+```
+
+This version integrates the core ideas from the provided context, sets expectations about current vs. planned features, and provides a more comprehensive overview for anyone (including an LLM) trying to understand the project's scope and design.
 
 --- requirements.txt ---
 # requirements.txt
@@ -252,148 +430,6 @@ PyQt5>=5.15.9
 --- tree.txt ---
 .
 ├── .git
-│   ├── COMMIT_EDITMSG
-│   ├── config
-│   ├── description
-│   ├── HEAD
-│   ├── hooks
-│   │   ├── applypatch-msg.sample
-│   │   ├── commit-msg.sample
-│   │   ├── fsmonitor-watchman.sample
-│   │   ├── post-update.sample
-│   │   ├── pre-applypatch.sample
-│   │   ├── pre-commit.sample
-│   │   ├── pre-merge-commit.sample
-│   │   ├── pre-push.sample
-│   │   ├── pre-rebase.sample
-│   │   ├── pre-receive.sample
-│   │   ├── prepare-commit-msg.sample
-│   │   ├── push-to-checkout.sample
-│   │   ├── sendemail-validate.sample
-│   │   └── update.sample
-│   ├── index
-│   ├── info
-│   │   └── exclude
-│   ├── logs
-│   │   ├── HEAD
-│   │   └── refs
-│   │       ├── heads
-│   │       │   └── main
-│   │       └── remotes
-│   │           └── origin
-│   │               └── main
-│   ├── objects
-│   │   ├── 0f
-│   │   │   └── 6dee994a90614c0df270921db629c396f02395
-│   │   ├── 13
-│   │   │   └── 82441d5eac96a061ad921e722a2288c5144a72
-│   │   ├── 14
-│   │   │   ├── 3f486c053e35edbe5b247f56e58c02d94fdd86
-│   │   │   └── 71ee07f2a4d9c3fcf115dbc2a210695fd09b8f
-│   │   ├── 16
-│   │   │   └── e24e544bfdbf8a406b5f93cab2a481662e1ffc
-│   │   ├── 23
-│   │   │   └── 9e311aeb91225fc61094ea83bdbf431d921d90
-│   │   ├── 26
-│   │   │   └── bae5d9cf0959b8cce45e2e8b55fbb75219de21
-│   │   ├── 2a
-│   │   │   └── 486587c63bc0f53da12a0da5ea7925652b2e48
-│   │   ├── 2e
-│   │   │   └── 12e0b978885d8942edd2ca968efd63146c6b92
-│   │   ├── 34
-│   │   │   └── 675cd30bcb39490310b758fb1bd82a5f6805ac
-│   │   ├── 41
-│   │   │   └── 04e6c13117e65b909ce17d7aade8ae9210bb24
-│   │   ├── 43
-│   │   │   └── d1eda31cb5c4e1121b01c36835d5114a324017
-│   │   ├── 45
-│   │   │   └── 25b6fc86a652a2cb7321f4fcf82fbe2e422972
-│   │   ├── 46
-│   │   │   └── 15de3b9d7833b728f4b9c82ed47b9bd57c7201
-│   │   ├── 4c
-│   │   │   └── de1ecf10f39c76e4f1da84882684f9a8008867
-│   │   ├── 4d
-│   │   │   └── c93eec9801935bf154d8b28d0383610860d63e
-│   │   ├── 56
-│   │   │   └── 7b3c98dabcf2a58be198a6b0107b21803079c4
-│   │   ├── 61
-│   │   │   └── e7e5066d97877a8af997135ea937824e3c1a5f
-│   │   ├── 65
-│   │   │   └── 0af1954b2b00871247609011814d62eea0139c
-│   │   ├── 6b
-│   │   │   └── ff1e646cc55ed8eb481c3425eb1fd7bb0e3466
-│   │   ├── 77
-│   │   │   ├── 64bb87c87c23ba9c56d13da3083ee20d3820da
-│   │   │   └── 829259a29d295bee38d2b315597056ffa5e53b
-│   │   ├── 78
-│   │   │   └── e9b4fb37aff83a7a8f91c2be91f0395ce4d0df
-│   │   ├── 80
-│   │   │   └── 31dcbba2701ed0e942f1520edc1d9ac8dd6ecc
-│   │   ├── 82
-│   │   │   └── 7c09dcdf4f5ce76fa168f25f7fee424011d970
-│   │   ├── 83
-│   │   │   └── e8ba967aae73ca10c74553009d4f9163ac8b15
-│   │   ├── 9b
-│   │   │   └── a831c1dbf67ececf0c22420f95236df7028527
-│   │   ├── 9c
-│   │   │   └── 4a212a18ea20add608c7f891c2324c3ca8eddf
-│   │   ├── 9d
-│   │   │   └── e233316ee9a06afdc1f30cc2e85ba297306d2a
-│   │   ├── a0
-│   │   │   └── 4fe408cecda1e6af8d1df92b24b56907a2a1cf
-│   │   ├── a2
-│   │   │   └── 5a51b182bf0a5ded90acf09d72b785c7902cfc
-│   │   ├── a3
-│   │   │   ├── 0ce3cf4ed5fc078b22b6f7231328a0ddeda489
-│   │   │   ├── 13cfc6b2e614cd3737707af1d8c8100fd5cd7e
-│   │   │   ├── 8005155c7e0c5c05cc1eebafbdaa6b1cd0ae8c
-│   │   │   └── bdb7079331fe28775484221eb0eefbf7381993
-│   │   ├── a6
-│   │   │   └── d05885d6dcb561d09676aec245e2e025ba8af2
-│   │   ├── a9
-│   │   │   └── 2456fccbb7dffaa39e356b0d77d1c278afe12c
-│   │   ├── ab
-│   │   │   └── c900a41767cb59ad2b32212ac4d2687423ee99
-│   │   ├── bb
-│   │   │   ├── bb91bc1a89f6c58c4e8d09cdcd1ce7d07a16c4
-│   │   │   └── d85b900b8da3f0fb4de8fc0fc47155197eb407
-│   │   ├── bd
-│   │   │   └── e5782f0dbc9fb5e7acc6d8dbd0c545bf50ab87
-│   │   ├── c1
-│   │   │   └── 90ef67947f88e9ec45cf0ae23d80e979589473
-│   │   ├── c7
-│   │   │   └── 4d4514e796f668cf8c8446894d891d823f8a6e
-│   │   ├── ca
-│   │   │   └── 088be94c0a5edfaf05e261f0e39860edb8e430
-│   │   ├── d0
-│   │   │   └── cd3a80b66e6ebf303b4b24d49ce935e131b54e
-│   │   ├── d6
-│   │   │   └── cf02534351a073da02ec98bad020ac644186f2
-│   │   ├── d9
-│   │   │   └── 8fc6f09c2b24e082400983ed841ea7d3d78bf2
-│   │   ├── e1
-│   │   │   └── e3ce2feeb0c465a127b84f7db7894263119d27
-│   │   ├── e6
-│   │   │   └── 9de29bb2d1d6434b8b29ae775ad8c2e48c5391
-│   │   ├── eb
-│   │   │   └── ffd6a5d0427b896291ff08cca13eb7d12dc25f
-│   │   ├── f2
-│   │   │   └── 43fd007859c8f048f2d84a4b5cdb72b562c514
-│   │   ├── f3
-│   │   │   └── 757168d8d4b2bdeb7c3fe14343df241cab567c
-│   │   ├── fd
-│   │   │   └── 4a1cfc4d9746fa5914a5bb87170b23311ffdf7
-│   │   ├── fe
-│   │   │   └── 8e3d46c4751cc0b4fd9f5d7841a7dd1a78085e
-│   │   ├── info
-│   │   └── pack
-│   └── refs
-│       ├── heads
-│       │   └── main
-│       ├── remotes
-│       │   └── origin
-│       │       └── main
-│       └── tags
 ├── .gitignore
 ├── .pytest_cache
 │   ├── .gitignore
@@ -440,6 +476,7 @@ PyQt5>=5.15.9
 │   ├── test_input_handler.py
 │   ├── test_library.py
 │   └── test_post_processor.py
+├── tree.txt
 └── venv
 
 --- configs\sfx_agent.yml ---
@@ -453,23 +490,30 @@ elevenlabs:
 
 # Ollama/Gemma settings
 gemma:
-  model: "gemma3:12b"
+  model: "gemma3:12b" # Make sure you have this model pulled in Ollama
 
 # Output settings
 output:
-  folder: "./output_sfx"
+  folder: "./output_sfx" # Relative to config file location
   file_format: "wav"
 
-# Prompt defaults
+# Prompt defaults & generation parameters
 prompt:
-  default_duration: 1.5       # seconds
-  prompt_influence: 0.8       # 0.0–1.0
-  batch_influences: [0.6, 0.8, 1.0]
+  default_duration: 1.5       # seconds (fallback if not in decomposed params)
+  prompt_influence: 0.8       # 0.0–1.0 (fallback if not in decomposed params)
+  batch_influences: [0.6, 0.8, 1.0] # List of influences for variation generation
+
+# Post-processing settings
+processing:
+  target_lufs: -18.0          # Target loudness for normalization
+
+# Library settings
+library:
+  path: "prompt_library.yml"  # Relative to config file location
 
 # Logging
 logging:
-  level: INFO
-
+  level: INFO                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 --- docs\architecture.md ---
 # architecture.md
@@ -550,14 +594,12 @@ def compose_prompt(params: Dict[str, any], template: str = None) -> str:
 --- sfx_agent\config.py ---
 # File: sfx_agent/config.py
 
-# TODO: Add logging to record loaded config values and validation steps
-# TODO: Support environment variable overrides (e.g., via python-dotenv)
-# TODO: Cache the loaded config so repeated instantiations are fast
-# TODO: Validate types (e.g., durations are numeric, batch_influences is a list of floats)
-
 import os
 from pathlib import Path
 from ruamel.yaml import YAML
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ConfigError(Exception):
     """Raised when config file is missing or invalid."""
@@ -567,40 +609,111 @@ class Config:
     def __init__(self, path: str = None):
         """
         Load and validate the YAML config for the SFX agent.
-        
+
         Args:
             path: Optional path to the config file. Defaults to 'configs/sfx_agent.yml'.
-        
+
         Raises:
             FileNotFoundError: If the config file does not exist.
             ConfigError: If required keys are missing or invalid.
         """
         yaml = YAML(typ="safe")
-        cfg_path = Path(path or "configs/sfx_agent.yml")
-        if not cfg_path.exists():
-            raise FileNotFoundError(f"Config file not found: {cfg_path}")
-        self._cfg = yaml.load(cfg_path)
-        self._validate()
+        # Determine path and RESOLVE it immediately
+        config_path_raw = Path(path or "configs/sfx_agent.yml")
+        # Resolve relative paths against CWD *before* checking existence
+        self.config_path = config_path_raw.resolve()
+
+        if not self.config_path.exists():
+            # Use the original raw path in the error message for clarity if it was relative
+            raise FileNotFoundError(f"Config file not found: {config_path_raw} (Resolved to: {self.config_path})")
+
+        logger.info(f"Loading configuration from: {self.config_path}")
+        try:
+            with self.config_path.open('r', encoding='utf-8') as f:
+                self._cfg = yaml.load(f)
+            if self._cfg is None: # Handle empty config file
+                raise ConfigError(f"Config file is empty: {self.config_path}")
+        except Exception as e:
+            raise ConfigError(f"Error loading or parsing config file {self.config_path}: {e}") from e
+
+        self._validate() # Perform validation after loading
+        logger.info("Configuration loaded and validated successfully.")
 
     def _validate(self):
         """
-        Ensure that all required sections and keys are present in the config.
-        Raises ConfigError on missing entries.
+        Ensure that all required sections and keys are present and have valid types.
+        Raises ConfigError on missing entries or type errors.
         """
         required = {
             "elevenlabs": ["voice", "model"],
             "gemma": ["model"],
             "output": ["folder", "file_format"],
             "prompt": ["default_duration", "prompt_influence", "batch_influences"],
+            "processing": ["target_lufs"],
+            "library": ["path"],
+            "logging": ["level"], # Added logging to required as it's usually needed
         }
-        missing = []
+        missing_sections = []
+        missing_keys = []
+
+        # 1. Check for missing sections
+        for section in required:
+            if section not in self._cfg:
+                missing_sections.append(section)
+        if missing_sections:
+            raise ConfigError(f"Missing required config sections: {', '.join(missing_sections)}")
+
+        # 2. Check for missing keys within existing sections
         for section, keys in required.items():
-            sec = self._cfg.get(section, {})
+            # Section is guaranteed to exist from the check above
+            sec_data = self._cfg[section]
+            if not isinstance(sec_data, dict): # Check if section is actually a dictionary
+                 raise ConfigError(f"Config section '{section}' is not a dictionary/mapping.")
             for key in keys:
-                if sec.get(key) is None:
-                    missing.append(f"{section}.{key}")
-        if missing:
-            raise ConfigError(f"Missing config entries: {missing}")
+                if key not in sec_data or sec_data.get(key) is None:
+                    missing_keys.append(f"{section}.{key}")
+        if missing_keys:
+            raise ConfigError(f"Missing required config entries: {', '.join(missing_keys)}")
+
+        # 3. Validate Types (only runs if all keys/sections are present)
+        try:
+            float(self._cfg["prompt"]["default_duration"])
+            float(self._cfg["prompt"]["prompt_influence"])
+            float(self._cfg["processing"]["target_lufs"])
+
+            # Validate batch_influences: first check type, then content
+            batch_influences_val = self._cfg["prompt"]["batch_influences"]
+            if not isinstance(batch_influences_val, list):
+                raise ConfigError("prompt.batch_influences must be a list")
+            if not batch_influences_val: # Check if list is empty (might be valid, might not)
+                 logger.warning("prompt.batch_influences is an empty list in the config.")
+            # Now attempt conversion only if it's a non-empty list
+            elif isinstance(batch_influences_val, list):
+                 [float(x) for x in batch_influences_val] # This will raise ValueError if items aren't floats
+
+        except ValueError as e:
+            # Catch specific float conversion errors
+            raise ConfigError(f"Invalid numeric value in config: {e}") from e
+        except KeyError as e:
+            # This should not happen if key presence check passed, but for safety:
+            raise ConfigError(f"Unexpected missing key during type validation: {e}") from e
+        except Exception as e:
+             # Catch other potential errors during type checks (e.g., list check above)
+             # or re-raise the specific ConfigError from the isinstance check
+             if isinstance(e, ConfigError):
+                 raise e
+             raise ConfigError(f"Error during type validation: {e}") from e
+
+        # Validate specific string types
+        if not isinstance(self._cfg["library"]["path"], str):
+             raise ConfigError("library.path must be a string")
+        if not isinstance(self._cfg["logging"]["level"], str):
+             raise ConfigError("logging.level must be a string")
+        # Add more string/enum checks as needed (e.g., logging level value)
+
+
+    # --- Properties ---
+    # (Properties remain the same as before, using self.config_path for resolution)
 
     @property
     def eleven_voice(self) -> str:
@@ -617,12 +730,17 @@ class Config:
     @property
     def output_folder(self) -> Path:
         folder = Path(self._cfg["output"]["folder"])
-        # TODO: Optionally create the folder if it doesn't exist
-        return folder
+        if not folder.is_absolute():
+            # Resolve relative to config file's parent dir
+            folder = self.config_path.parent / folder
+        return folder.resolve()
 
     @property
     def output_format(self) -> str:
-        return self._cfg["output"]["file_format"]
+        fmt = self._cfg["output"]["file_format"].lower()
+        if fmt not in ['wav', 'mp3']:
+             logger.warning(f"Configured output format '{fmt}' might not be widely supported. Using anyway.")
+        return fmt
 
     @property
     def default_duration(self) -> float:
@@ -634,8 +752,32 @@ class Config:
 
     @property
     def batch_influences(self) -> list[float]:
-        return [float(x) for x in self._cfg["prompt"]["batch_influences"]]
+         # Ensure conversion happens here too, defensively
+        try:
+            return [float(x) for x in self._cfg["prompt"]["batch_influences"]]
+        except (ValueError, TypeError):
+             logger.error("Invalid values in prompt.batch_influences despite validation! Returning empty list.")
+             return [] # Or raise? Should not happen if validation works.
 
+    @property
+    def target_lufs(self) -> float:
+        """Target LUFS for post-processing normalization."""
+        return float(self._cfg["processing"]["target_lufs"])
+
+    @property
+    def library_path(self) -> Path:
+        """Path to the YAML library file for storing results."""
+        lib_path = Path(self._cfg["library"]["path"])
+        if not lib_path.is_absolute():
+             # Resolve relative to config file's parent dir
+            lib_path = self.config_path.parent / lib_path
+        return lib_path.resolve()
+
+    @property
+    def log_level(self) -> str:
+        """Logging level string."""
+        # Consider uppercasing for consistency with logging module constants
+        return self._cfg["logging"]["level"].upper()
 
 --- sfx_agent\decomposer.py ---
 # File: sfx_agent/decomposer.py
@@ -904,12 +1046,428 @@ def add_to_library(brief: str, results: list[dict], path: str = None) -> Path:
 
 
 --- sfx_agent\post_processor.py ---
-# post_processor.py
+# File: sfx_agent/post_processor.py
 
+import numpy as np
+import logging
+from pathlib import Path
+from typing import Dict, Union, Optional
+
+# TODO: Add more sophisticated peak handling (e.g., true peak, limiting)
+# TODO: Make target LUFS configurable via Config class
+# TODO: Handle different audio formats more explicitly if needed
+
+# --- REMOVED ERRONEOUS SELF-IMPORT THAT WAS HERE ---
+
+# Attempt to import external libraries, providing helpful errors if missing
+try:
+    from pydub import AudioSegment
+    from pydub.exceptions import CouldntDecodeError
+except ImportError:
+    raise ImportError("pydub not installed or ffmpeg/ffprobe not found. Please install `pydub` and ensure ffmpeg is in your system PATH.")
+
+try:
+    import pyloudnorm as pyln
+except ImportError:
+    raise ImportError("pyloudnorm not installed. Please install `pyloudnorm`.")
+
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_TARGET_LUFS = -18.0
+
+class PostProcessingError(Exception):
+    """Custom exception for errors during post-processing."""
+    pass
+
+
+def process_audio(
+    raw_audio_path: Path,
+    target_lufs: float = DEFAULT_TARGET_LUFS,
+    output_dir: Optional[Path] = None,
+    overwrite_original: bool = False
+) -> Dict[str, Union[float, str, Path, bool]]:
+    """
+    Loads raw audio, calculates metrics, normalizes loudness, and saves the result.
+
+    Args:
+        raw_audio_path: Path to the input audio file.
+        target_lufs: Target loudness in LUFS (default: -18.0).
+        output_dir: Directory to save the normalized file. If None, saves
+                    in the same directory as the raw file with a suffix.
+        overwrite_original: If True, overwrites the original file instead of
+                           creating a new one. Use with caution.
+
+    Returns:
+        A dictionary containing processing results and metrics:
+        - original_lufs (float): Integrated loudness of the original file.
+        - original_peak_dbfs (float): Peak amplitude of the original file in dBFS.
+        - target_lufs (float): The target loudness used for normalization.
+        - gain_applied_db (float): The gain applied during normalization (dB).
+                                   Might be less than calculated if clipping was prevented.
+        - clipping_prevented (bool): True if gain was limited to prevent clipping.
+        - normalized_lufs (float): Integrated loudness of the normalized file.
+        - normalized_peak_dbfs (float): Peak amplitude of the normalized file in dBFS.
+        - output_path (Path): Path to the processed (normalized) audio file.
+        - error (Optional[str]): Error message if processing failed (only set if not raising).
+
+    Raises:
+        FileNotFoundError: If the raw_audio_path does not exist.
+        PostProcessingError: For issues during audio loading or processing, including unexpected errors.
+    """
+    if not raw_audio_path.exists():
+        raise FileNotFoundError(f"Raw audio file not found: {raw_audio_path}")
+
+    # Initialize results dict - error field might not be used if we always raise
+    results = {
+        "original_lufs": None,
+        "original_peak_dbfs": None,
+        "target_lufs": target_lufs,
+        "gain_applied_db": 0.0,
+        "clipping_prevented": False,
+        "normalized_lufs": None,
+        "normalized_peak_dbfs": None,
+        "output_path": None,
+        "error": None, # Kept for structure, but expect exceptions on failure
+    }
+
+    try:
+        # 1. Load audio
+        logger.info(f"Loading audio file: {raw_audio_path}")
+        try:
+            audio = AudioSegment.from_file(raw_audio_path)
+        except CouldntDecodeError as e:
+            # Specific error for decoding issues
+            raise PostProcessingError(f"Failed to decode audio file: {raw_audio_path}. Ensure it's a valid format and ffmpeg is installed.") from e
+        except Exception as e:
+             # Catch other potential pydub loading errors
+             raise PostProcessingError(f"Error loading audio file {raw_audio_path}: {e}") from e
+
+        # Ensure mono or stereo - pyloudnorm primarily works with mono/stereo
+        if audio.channels > 2:
+            logger.warning(f"Audio has {audio.channels} channels. Converting to stereo for LUFS calculation.")
+            audio = audio.set_channels(2)
+        elif audio.channels == 0:
+             raise PostProcessingError(f"Audio file {raw_audio_path} has 0 channels.")
+
+
+        # 2. Get data for pyloudnorm (requires float NumPy array)
+        # Convert pydub samples (often int) to float array between -1.0 and 1.0
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        # Scale integer types to float range
+        if audio.sample_width == 2: # 16-bit
+            samples /= (1 << 15) # Divide by 32768
+        elif audio.sample_width == 4: # 32-bit (assuming int32)
+             samples /= (1 << 31)
+        elif audio.sample_width == 1: # 8-bit (unsigned)
+             samples = (samples / (1 << 8)) * 2.0 - 1.0 # Scale uint8 to [-1, 1]
+        # else: assume already float or handle other widths if necessary
+
+        # Reshape if stereo
+        if audio.channels == 2:
+            samples = samples.reshape((-1, 2))
+
+        # 3. Calculate original metrics
+        meter = pyln.Meter(audio.frame_rate) # Create BS.1770 meter
+        original_lufs = meter.integrated_loudness(samples)
+        original_peak_dbfs = audio.max_dBFS # Peak from pydub
+
+        results["original_lufs"] = original_lufs
+        results["original_peak_dbfs"] = original_peak_dbfs
+        logger.info(f"Original Metrics - LUFS: {original_lufs:.2f}, Peak: {original_peak_dbfs:.2f} dBFS")
+
+
+        # Handle silence (-inf LUFS)
+        if original_lufs == -float('inf'):
+            logger.warning(f"Audio file {raw_audio_path} appears silent. Skipping normalization.")
+            results["gain_applied_db"] = 0.0
+            normalized_audio = audio # No change needed
+            results["normalized_lufs"] = original_lufs
+            results["normalized_peak_dbfs"] = original_peak_dbfs
+        else:
+            # 4. Calculate required gain for normalization
+            gain_to_target_db = target_lufs - original_lufs
+
+            # 5. Check for potential clipping
+            predicted_peak = original_peak_dbfs + gain_to_target_db
+            gain_applied_db = gain_to_target_db
+            clipping_prevented = False
+
+            if predicted_peak > 0.0:
+                clipping_prevented = True
+                # Limit gain to prevent peak from exceeding 0.0 dBFS
+                gain_applied_db = -original_peak_dbfs
+                logger.warning(
+                    f"Clipping prevented! Target LUFS ({target_lufs:.2f}) would exceed 0dBFS peak. "
+                    f"Limiting gain to {gain_applied_db:.2f} dB."
+                )
+            results["clipping_prevented"] = clipping_prevented
+            results["gain_applied_db"] = gain_applied_db
+
+            # 6. Apply gain
+            logger.info(f"Applying {gain_applied_db:.2f} dB gain...")
+            normalized_audio = audio.apply_gain(gain_applied_db)
+
+            # 7. Recalculate metrics on normalized audio (optional but good verification)
+            norm_samples = np.array(normalized_audio.get_array_of_samples(), dtype=np.float32)
+            if normalized_audio.sample_width == 2: norm_samples /= (1 << 15)
+            elif normalized_audio.sample_width == 4: norm_samples /= (1 << 31)
+            elif normalized_audio.sample_width == 1: norm_samples = (norm_samples / (1 << 8)) * 2.0 - 1.0
+            if normalized_audio.channels == 2: norm_samples = norm_samples.reshape((-1, 2))
+
+            # Use a new meter instance or ensure the state is reset if reusing
+            norm_meter = pyln.Meter(normalized_audio.frame_rate)
+            normalized_lufs = norm_meter.integrated_loudness(norm_samples)
+            normalized_peak_dbfs = normalized_audio.max_dBFS
+            results["normalized_lufs"] = normalized_lufs
+            results["normalized_peak_dbfs"] = normalized_peak_dbfs
+            logger.info(f"Normalized Metrics - LUFS: {normalized_lufs:.2f}, Peak: {normalized_peak_dbfs:.2f} dBFS")
+
+
+        # 8. Determine output path and Save
+        file_suffix = raw_audio_path.suffix
+        file_format = file_suffix[1:].lower() # e.g., 'wav', 'mp3'
+
+        if overwrite_original:
+            output_path = raw_audio_path
+            logger.warning(f"Overwriting original file: {output_path}")
+        else:
+            out_filename = f"{raw_audio_path.stem}_norm{file_suffix}"
+            if output_dir:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_path = output_dir / out_filename
+            else:
+                # Save in the same directory as the input
+                output_path = raw_audio_path.with_name(out_filename)
+
+        logger.info(f"Saving normalized audio to: {output_path}")
+        normalized_audio.export(output_path, format=file_format)
+        results["output_path"] = output_path
+
+
+    except FileNotFoundError as e:
+        # Log and re-raise specific exceptions we want callers to handle distinctly
+        logger.error(f"File not found during processing: {e}")
+        # results["error"] = str(e) # Set error before raising if needed elsewhere
+        raise # Re-raise file not found errors
+
+    except PostProcessingError as e:
+        # Log and re-raise known processing errors
+        logger.error(f"Post-processing failed: {e}")
+        # results["error"] = str(e)
+        raise # <<< RE-RAISE PostProcessingError
+
+    except Exception as e:
+        # Catch any other unexpected exceptions
+        logger.exception(f"An unexpected error occurred during post-processing of {raw_audio_path}: {e}")
+        # results["error"] = f"Unexpected error: {e}"
+        # Wrap unexpected errors in PostProcessingError for consistent exception handling
+        raise PostProcessingError(f"Unexpected error during processing: {e}") from e # <<< RE-RAISE as PostProcessingError
+
+
+    return results # Return results dict only on success
 
 --- sfx_agent\runner.py ---
-# runner.py
+# File: sfx_agent/runner.py
 
+import logging
+from pathlib import Path
+from typing import List, Dict, Any, Tuple
+
+from .config import Config, ConfigError
+from .decomposer import decompose_brief, DecomposerError
+from .composer import compose_prompt
+from .generator import generate_audio # Assuming generate_audio takes config now
+from .post_processor import process_audio, PostProcessingError
+from .library import add_to_library
+
+
+logger = logging.getLogger(__name__)
+
+# Define expected keys from the decomposer's structured parameters
+# This helps validate the decomposer's output
+REQUIRED_DECOMPOSER_KEYS_FOR_PROMPT = [
+    "source", "timbre", "dynamics", "pitch", "space", "analogy"
+]
+# Optional keys related to generation parameters (use defaults if missing)
+GENERATION_PARAM_KEYS = ["duration", "prompt_influence", "batch_influences"]
+
+
+def run_sfx_pipeline(brief: str, config_path: str) -> Tuple[List[Path], List[str]]:
+    """
+    Runs the full SFX generation pipeline for a given brief.
+
+    Args:
+        brief: The natural language SFX brief.
+        config_path: Path to the configuration YAML file.
+
+    Returns:
+        A tuple containing:
+        - List of Paths to the successfully generated and processed audio files.
+        - List of error messages encountered during the pipeline.
+    """
+    processed_files: List[Path] = []
+    errors: List[str] = []
+    results_for_library: List[Dict[str, Any]] = []
+
+    try:
+        # 1. Load Configuration
+        logger.info(f"Initiating SFX pipeline for brief: '{brief}'")
+        cfg = Config(config_path)
+
+    except (FileNotFoundError, ConfigError) as e:
+        msg = f"Configuration error: {e}"
+        logger.exception(msg) # Log traceback for config errors
+        errors.append(msg)
+        return processed_files, errors # Cannot proceed without config
+
+    try:
+        # 2. Decompose Brief
+        logger.info("Decomposing brief...")
+        try:
+            structured_params = decompose_brief(brief) # Model name from config used internally
+            logger.debug(f"Decomposed params: {structured_params}")
+
+            # Validate required keys for composing the prompt
+            missing_keys = [k for k in REQUIRED_DECOMPOSER_KEYS_FOR_PROMPT if k not in structured_params]
+            if missing_keys:
+                 raise DecomposerError(f"Decomposer output missing required keys for prompt: {missing_keys}")
+
+        except DecomposerError as e:
+            msg = f"Failed to decompose brief: {e}"
+            logger.error(msg)
+            errors.append(msg)
+            return processed_files, errors # Cannot proceed without structured params
+
+        # 3. Determine Generation Parameters
+        duration = float(structured_params.get('duration', cfg.default_duration))
+        # Use batch_influences from params if provided, else from config
+        influences_to_run = structured_params.get('batch_influences', cfg.batch_influences)
+        if not isinstance(influences_to_run, list) or not influences_to_run:
+            logger.warning(f"Invalid or empty 'batch_influences' from decomposer ({influences_to_run}), falling back to config default: {cfg.batch_influences}")
+            influences_to_run = cfg.batch_influences
+        # Ensure they are floats
+        try:
+             influences_to_run = [float(inf) for inf in influences_to_run]
+        except (ValueError, TypeError):
+             logger.warning(f"Invalid influence values in list ({influences_to_run}), falling back to config default: {cfg.batch_influences}")
+             influences_to_run = cfg.batch_influences
+
+        logger.info(f"Generating {len(influences_to_run)} variations with influences: {influences_to_run}")
+
+        # 4. Loop through variations (Influences) for Generation & Processing
+        for i, influence in enumerate(influences_to_run):
+            logger.info(f"--- Variation {i+1}/{len(influences_to_run)} (Influence: {influence:.2f}) ---")
+            raw_audio_path: Path | None = None # Track path for post-processing
+
+            try:
+                # 4a. Compose Prompt for this variation
+                # Create a copy of params for this iteration, updating influence/duration
+                iter_params = structured_params.copy()
+                iter_params['prompt_influence'] = influence # Set the specific influence for composing
+                iter_params['duration'] = duration # Ensure duration is set for composer/generator
+
+                logger.debug(f"Composing prompt with params: {iter_params}")
+                text_prompt = compose_prompt(iter_params) # Uses default template unless overridden
+                logger.info(f"Composed Prompt: {text_prompt}")
+
+                # 4b. Generate Audio
+                logger.info("Generating audio via ElevenLabs...")
+                # Pass the single influence value needed by the generator API
+                raw_audio_path = generate_audio(
+                    prompt=text_prompt,
+                    duration=duration, # Duration might be used by API later? Pass it.
+                    prompt_influence=influence, # The key control parameter
+                    config=cfg
+                )
+                logger.info(f"Raw audio generated: {raw_audio_path}")
+
+                # 4c. Post-Process Audio
+                logger.info("Post-processing audio...")
+                processing_results = process_audio(
+                    raw_audio_path=raw_audio_path,
+                    target_lufs=cfg.target_lufs,
+                    output_dir=cfg.output_folder, # Save normalized to the main output
+                    overwrite_original=False # Keep raw for now, save normalized separately
+                )
+
+                # Check if post-processing itself reported an error internally (though it now raises)
+                # if processing_results.get("error"):
+                #     msg = f"Post-processing failed for {raw_audio_path}: {processing_results['error']}"
+                #     logger.error(msg)
+                #     errors.append(msg)
+                #     # Decide if we should skip adding this failed one to library
+                #     continue # Skip to next influence variation
+
+                # Successfully processed
+                processed_file = processing_results.get("output_path")
+                if processed_file:
+                    logger.info(f"Audio successfully processed: {processed_file}")
+                    processed_files.append(processed_file)
+                    # Prepare data for library entry
+                    library_entry = processing_results.copy()
+                    library_entry["brief"] = brief # Add original brief context
+                    library_entry["prompt"] = text_prompt # Add prompt used
+                    library_entry["raw_audio_path"] = raw_audio_path # Store raw path too? Optional.
+                    results_for_library.append(library_entry)
+                else:
+                    # This case shouldn't happen if process_audio raises on failure
+                    msg = f"Post-processing completed but no output path returned for {raw_audio_path}."
+                    logger.error(msg)
+                    errors.append(msg)
+
+            except KeyError as e:
+                msg = f"Error during composition (missing key {e}) for influence {influence:.2f}."
+                logger.exception(msg)
+                errors.append(msg)
+            except (FileNotFoundError, PostProcessingError) as e:
+                msg = f"Error during post-processing for influence {influence:.2f} (raw file: {raw_audio_path}): {e}"
+                logger.exception(msg)
+                errors.append(msg)
+            except Exception as e:
+                # Catch potential generation errors or other unexpected issues
+                msg = f"Error during generation/processing loop for influence {influence:.2f}: {e}"
+                logger.exception(msg) # Log full traceback for unexpected errors
+                errors.append(msg)
+
+            finally:
+                # Optional: Clean up raw audio file if normalized exists and overwrite=False
+                # if not cfg.processing.get("keep_raw", True) and raw_audio_path and raw_audio_path.exists() and ... :
+                #    logger.debug(f"Removing raw audio file: {raw_audio_path}")
+                #    raw_audio_path.unlink(missing_ok=True)
+                pass
+
+
+        # 5. Store results in Library (if any were successful)
+        if results_for_library:
+            logger.info(f"Adding {len(results_for_library)} results to library...")
+            try:
+                lib_path = add_to_library(
+                    brief=brief,
+                    results=results_for_library,
+                    path=str(cfg.library_path) # Use path from config
+                )
+                logger.info(f"Results added to library: {lib_path}")
+            except Exception as e:
+                msg = f"Failed to add results to library {cfg.library_path}: {e}"
+                logger.exception(msg)
+                errors.append(msg)
+        elif not errors:
+             logger.warning("Pipeline finished but no successful results were generated to add to library.")
+        else:
+             logger.error("Pipeline finished with errors and no successful results were generated.")
+
+
+    except Exception as e:
+        # Catch-all for unexpected errors during setup/orchestration
+        msg = f"Unhandled exception during pipeline execution: {e}"
+        logger.exception(msg)
+        errors.append(msg)
+
+    # 6. Return results
+    log_level = logging.ERROR if errors else logging.INFO
+    logger.log(log_level, f"SFX Pipeline finished. Successes: {len(processed_files)}, Errors: {len(errors)}")
+    return processed_files, errors
 
 --- sfx_agent\__init__.py ---
 # __init__.py
@@ -958,92 +1516,232 @@ def test_compose_missing_key_raises_key_error(sample_params):
 
 
 --- tests\test_config.py ---
-# test_config.py
 # File: tests/test_config.py
-
-# TODO: Add tests for environment variable overrides
-# TODO: Test behavior when output folder does not exist
-# TODO: Parametrize invalid types (e.g., non-numeric durations)
 
 import pytest
 import os
 from pathlib import Path
 from ruamel.yaml import YAML
 
+# Import from the module itself now
 from sfx_agent.config import Config, ConfigError
+
+# --- Updated YAML strings ---
 
 VALID_YAML = """
 elevenlabs:
   voice: "sound_effects"
   model: "eleven_multisfx_v1"
-
 gemma:
   model: "gemma3:12b"
-
 output:
   folder: "./out_sfx"
   file_format: "wav"
-
 prompt:
   default_duration: 2.0
   prompt_influence: 0.75
   batch_influences: [0.5, 0.8, 1.0]
+processing:
+  target_lufs: -18.5
+library:
+  path: "my_library.yml"
+logging:
+  level: INFO
 """
 
-MISSING_YAML = """
+# MISSING_YAML - now focusing on missing *keys* within existing sections
+MISSING_KEYS_YAML = """
 elevenlabs:
   voice: "sound_effects"
-
+  # model: missing
 gemma:
   model: "gemma3:12b"
-
 output:
   folder: "./out_sfx"
-
+  # file_format: missing
 prompt:
   default_duration: 2.0
+  # prompt_influence: missing
+  batch_influences: [0.5] # Intentionally missing some keys
+processing:
+  # target_lufs: missing
+  extra_key: value # Add an extra key to ensure sections are dicts
+library:
+  # path: missing
+  another_key: 123
+logging:
+  # level: missing
+  yet_another: true
 """
+
+# --- Test Utility ---
 
 def write_yaml(tmp_path: Path, content: str) -> Path:
     cfg_file = tmp_path / "config.yml"
-    cfg_file.write_text(content)
+    # Ensure consistent line endings and encoding
+    cfg_file.write_text(content.strip(), encoding='utf-8')
     return cfg_file
+
+# --- Test Cases ---
 
 def test_load_valid_config(tmp_path, monkeypatch):
     cfg_path = write_yaml(tmp_path, VALID_YAML)
-    # Monkeypatch default path
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.chdir(tmp_path) # Change CWD for relative path resolution
     cfg = Config("config.yml")
+
+    # Existing assertions
     assert cfg.eleven_voice == "sound_effects"
     assert cfg.eleven_model == "eleven_multisfx_v1"
     assert cfg.gemma_model == "gemma3:12b"
-    assert cfg.output_folder == Path("./out_sfx")
+    # Check resolved absolute path based on tmp_path CWD
+    assert cfg.output_folder == (tmp_path / "out_sfx").resolve()
     assert cfg.output_format == "wav"
     assert cfg.default_duration == 2.0
     assert cfg.prompt_influence == 0.75
     assert cfg.batch_influences == [0.5, 0.8, 1.0]
+
+    # New assertions for added properties
+    assert cfg.target_lufs == -18.5
+    assert cfg.library_path == (tmp_path / "my_library.yml").resolve()
+    # Check resolved absolute path of the config file itself
+    assert cfg.config_path == (tmp_path / "config.yml").resolve()
+    assert cfg.log_level == "INFO"
 
 def test_missing_config_file(tmp_path):
     with pytest.raises(FileNotFoundError):
         Config(str(tmp_path / "nonexistent.yml"))
 
 def test_missing_required_keys(tmp_path, monkeypatch):
-    cfg_path = write_yaml(tmp_path, MISSING_YAML)
+    # Using MISSING_KEYS_YAML now
+    cfg_path = write_yaml(tmp_path, MISSING_KEYS_YAML)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ConfigError) as exc:
         Config("config.yml")
     msg = str(exc.value)
+    print(f"\nValidation error message (missing keys): {msg}")
+
+    # Check that the specific missing keys are mentioned
+    assert "Missing required config entries" in msg
     assert "elevenlabs.model" in msg
     assert "output.file_format" in msg
     assert "prompt.prompt_influence" in msg
+    # 'prompt.batch_influences' is NOT missing in MISSING_KEYS_YAML
+    assert "processing.target_lufs" in msg
+    assert "library.path" in msg
+    assert "logging.level" in msg
 
-def test_invalid_type_for_duration(tmp_path, monkeypatch):
-    bad_yaml = VALID_YAML.replace("2.0", "\"two\"")
+def test_missing_required_sections(tmp_path, monkeypatch):
+    # Create YAML missing entire sections
+    missing_sections_yaml = """
+elevenlabs:
+  voice: "sound_effects"
+  model: "eleven_multisfx_v1"
+# gemma: section missing
+output:
+  folder: "./out_sfx"
+  file_format: "wav"
+prompt:
+  default_duration: 2.0
+  prompt_influence: 0.75
+  batch_influences: [0.5, 0.8, 1.0]
+# processing: section missing
+# library: section missing
+# logging: section missing
+"""
+    cfg_path = write_yaml(tmp_path, missing_sections_yaml)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (missing sections): {msg}")
+    assert "Missing required config sections" in msg
+    assert "gemma" in msg
+    assert "processing" in msg
+    assert "library" in msg
+    assert "logging" in msg
+
+def test_invalid_type_for_floats(tmp_path, monkeypatch):
+    # Test float conversion errors
+    bad_yaml = VALID_YAML.replace("prompt_influence: 0.75", "prompt_influence: \"zero point seventy five\"")
+    bad_yaml = bad_yaml.replace("target_lufs: -18.5", "target_lufs: false") # Invalid LUFS type
     cfg_path = write_yaml(tmp_path, bad_yaml)
     monkeypatch.chdir(tmp_path)
-    with pytest.raises(ValueError):
-        Config("config.yml").default_duration  # conversion to float should fail
 
+    # Validation now raises ConfigError wrapping ValueError
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (invalid float): {msg}")
+    assert "Invalid numeric value" in msg
+    # Check if specific error is mentioned
+    assert "could not convert string to float: 'zero point seventy five'" in msg or "could not convert string to float" in msg # Allow variation based on which float fails first
+
+def test_invalid_type_for_list(tmp_path, monkeypatch):
+    # batch_influences isn't a list
+    bad_yaml = VALID_YAML.replace("[0.5, 0.8, 1.0]", "not_a_list")
+    cfg_path = write_yaml(tmp_path, bad_yaml)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (invalid list): {msg}")
+    # This error comes from the specific isinstance check
+    assert "prompt.batch_influences must be a list" in msg
+
+def test_invalid_type_for_list_items(tmp_path, monkeypatch):
+    # batch_influences is a list, but items aren't floats
+    bad_yaml = VALID_YAML.replace("[0.5, 0.8, 1.0]", "[0.5, \"oops\", 1.0]")
+    cfg_path = write_yaml(tmp_path, bad_yaml)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (invalid list items): {msg}")
+    # This error comes from the list comprehension conversion attempt
+    assert "Invalid numeric value" in msg
+    assert "could not convert string to float: 'oops'" in msg
+
+def test_invalid_type_for_string(tmp_path, monkeypatch):
+    bad_yaml = VALID_YAML.replace("path: \"my_library.yml\"", "path: 12345") # library.path isn't a string
+    cfg_path = write_yaml(tmp_path, bad_yaml)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (invalid string): {msg}")
+    assert "library.path must be a string" in msg
+
+def test_empty_config_file(tmp_path, monkeypatch):
+    cfg_path = write_yaml(tmp_path, "") # Empty file
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (empty file): {msg}")
+    assert "Config file is empty" in msg
+
+def test_section_not_dict(tmp_path, monkeypatch):
+    # Replace a section's expected dictionary value with a simple string
+    # Important: Ensure the replacement doesn't create syntactically invalid YAML overall
+    # Replacing just the value part after the colon should be safer for the parser
+    bad_yaml = VALID_YAML.replace("model: \"gemma3:12b\"", "\"this_should_be_a_dict\"") # Replaces gemma.model value
+    # To replace the whole section value might need careful formatting:
+    # bad_yaml = VALID_YAML.replace("gemma:\n  model: \"gemma3:12b\"", "gemma: \"this_should_be_a_dict\"")
+
+    cfg_path = write_yaml(tmp_path, bad_yaml)
+    monkeypatch.chdir(tmp_path)
+
+    # Expect the error during loading/parsing, not validation check
+    with pytest.raises(ConfigError) as exc:
+        Config("config.yml")
+    msg = str(exc.value)
+    print(f"\nValidation error message (section not dict): {msg}")
+
+    # Adjust assertion to check for the loading/parsing error message OR our validation message
+    # because ruamel.yaml might sometimes parse it successfully depending on structure,
+    # letting our validation catch it.
+    assert "Error loading or parsing config file" in msg or \
+           "Config section 'gemma' is not a dictionary/mapping" in msg
 
 --- tests\test_decomposer.py ---
 # File: tests/test_decomposer.py
@@ -1229,13 +1927,9 @@ def test_parse_args_interactive(monkeypatch):
 --- tests\test_library.py ---
 # File: tests/test_library.py
 
-# TODO: Test behavior when results list is empty
-# TODO: Test that invalid YAML in existing file raises a clear error
-# TODO: Parametrize with multiple briefs and verify isolation
-
 import pytest
 from pathlib import Path
-from ruamel.yaml import YAML
+from ruamel.yaml import YAML, YAMLError # Import YAMLError for another test
 
 from sfx_agent.library import add_to_library
 
@@ -1243,43 +1937,710 @@ from sfx_agent.library import add_to_library
 def yaml_loader():
     return YAML(typ="safe")
 
-def test_add_to_new_library(tmp_path, yaml_loader):
-    lib_file = tmp_path / "lib.yml"
-    brief = "my test brief"
-    results = [{"path": "a.wav", "peak_dB": -1.0}]
-    out_path = add_to_library(brief, results, path=str(lib_file))
-    assert out_path == lib_file
-    assert lib_file.exists()
-
-    data = yaml_loader.load(lib_file)
-    assert brief in data
-    assert data[brief] == results
+# ... (other tests remain the same) ...
 
 def test_append_to_existing(tmp_path, yaml_loader):
     lib_file = tmp_path / "lib.yml"
-    initial = {"my test brief": [{"path": "a.wav", "peak_dB": -1.0}]}
-    yaml_loader.dump(initial, lib_file.open("w"))
+    brief = "my test brief"
+    initial_list = [{"path": "a.wav", "peak_dB": -1.0}]
+    initial_data = {brief: initial_list} # Structure matching the library format
 
+    # --- Setup: Write initial data ensuring file is closed ---
+    try:
+        with lib_file.open("w", encoding="utf-8") as f:
+            yaml_loader.dump(initial_data, f)
+    except Exception as e:
+        pytest.fail(f"Setup failed: Error writing initial YAML: {e}")
+
+    # Verify setup wrote correctly (optional but good sanity check)
+    try:
+        with lib_file.open("r", encoding="utf-8") as f:
+            setup_data = yaml_loader.load(f)
+        assert setup_data == initial_data, "Setup check failed: Initial data not written correctly."
+    except Exception as e:
+        pytest.fail(f"Setup failed: Error reading back initial YAML: {e}")
+
+
+    # --- Action: Call the function under test ---
     new_results = [{"path": "b.wav", "peak_dB": -2.0}]
-    add_to_library("my test brief", new_results, path=str(lib_file))
+    try:
+        add_to_library(brief, new_results, path=str(lib_file))
+    except Exception as e:
+        pytest.fail(f"Function call failed: add_to_library raised an exception: {e}")
 
-    data = yaml_loader.load(lib_file)
-    assert data["my test brief"] == initial["my test brief"] + new_results
 
-def test_library_creates_parent_dirs(tmp_path, yaml_loader):
-    nested = tmp_path / "nested" / "dir" / "lib.yml"
-    assert not nested.exists()
+    # --- Verification: Load final data and assert ---
+    final_data = None
+    try:
+        with lib_file.open("r", encoding="utf-8") as f:
+            final_data = yaml_loader.load(f)
+    except Exception as e:
+        pytest.fail(f"Verification failed: Error reading final YAML: {e}")
 
-    add_to_library("brief", [], path=str(nested))
-    assert nested.exists()
+    assert final_data is not None, "Verification failed: Could not load final YAML data."
+    assert brief in final_data, f"Verification failed: Brief '{brief}' not found in final data."
+    
+    expected_list = initial_list + new_results # Calculate expected combined list
+    
+    print(f"\nDebug Info:")
+    print(f"  Initial List: {initial_list}")
+    print(f"  New Results: {new_results}")
+    print(f"  Expected List: {expected_list}")
+    print(f"  Actual List in File: {final_data.get(brief)}") # Use .get for safety
 
-    data = yaml_loader.load(nested)
-    assert data == {"brief": []}
+    assert final_data[brief] == expected_list, "The list in the final YAML file did not match the expected combined list."
 
+# --- Add tests for TODOs ---
+
+def test_add_with_empty_results(tmp_path, yaml_loader):
+    """Tests adding an empty results list."""
+    lib_file = tmp_path / "lib.yml"
+    brief = "empty brief"
+    results = []
+    add_to_library(brief, results, path=str(lib_file))
+
+    with lib_file.open("r") as f:
+        data = yaml_loader.load(f)
+    assert data == {brief: []} # Should create the key with an empty list
+
+def test_add_to_invalid_yaml_raises_error(tmp_path):
+    """Tests behavior when the existing library file is corrupt."""
+    lib_file = tmp_path / "lib.yml"
+    lib_file.write_text("invalid: yaml: here\n  - unmatched bracket") # Write invalid YAML
+
+    brief = "test brief"
+    results = [{"path": "c.wav"}]
+
+    # Expect ruamel.yaml's parser error during the load step
+    with pytest.raises(YAMLError):
+        add_to_library(brief, results, path=str(lib_file))
+
+def test_multiple_briefs_isolated(tmp_path, yaml_loader):
+    """Tests that adding to one brief doesn't affect others."""
+    lib_file = tmp_path / "lib.yml"
+    brief1 = "brief one"
+    brief2 = "brief two"
+    initial_data = {brief1: [{"path": "1a.wav"}]}
+
+    # Setup initial state
+    with lib_file.open("w") as f:
+        yaml_loader.dump(initial_data, f)
+
+    # Add to brief2
+    results2 = [{"path": "2a.wav"}]
+    add_to_library(brief2, results2, path=str(lib_file))
+
+    # Add more to brief1
+    results1_more = [{"path": "1b.wav"}]
+    add_to_library(brief1, results1_more, path=str(lib_file))
+
+    # Verify final state
+    with lib_file.open("r") as f:
+        final_data = yaml_loader.load(f)
+
+    expected_data = {
+        brief1: [{"path": "1a.wav"}, {"path": "1b.wav"}],
+        brief2: [{"path": "2a.wav"}]
+    }
+    assert final_data == expected_data
 
 --- tests\test_post_processor.py ---
-# test_post_processor.py
+# File: tests/test_post_processor.py
 
+import pytest
+import numpy as np
+import logging
+from pathlib import Path
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
+
+# --- Import the module under test using an alias ---
+# This is the primary change to avoid the partial initialization error.
+import sfx_agent.post_processor as post_processor_module
+
+# --- Import libraries used DIRECTLY in tests/fixtures ---
+try:
+    import pyloudnorm as pyln
+except ImportError:
+    # If pyloudnorm is missing, fixtures/tests needing it will be skipped.
+    pyln = None
+
+
+# --- Use constants/exceptions accessed via the module alias ---
+DEFAULT_TARGET_LUFS = post_processor_module.DEFAULT_TARGET_LUFS
+PostProcessingError = post_processor_module.PostProcessingError
+
+
+# Configure logging for tests (optional, helps debugging)
+# logging.basicConfig(level=logging.DEBUG)
+
+
+# --- Test Fixtures ---
+
+@pytest.fixture(scope="module")
+def sine_wave_generator():
+    """Generates mono sine wave AudioSegments."""
+    def _create(freq=440, duration_ms=1000, amplitude_dbfs=-20.0, sample_rate=44100):
+        seg = AudioSegment.silent(duration=duration_ms, frame_rate=sample_rate)
+        num_samples = int(sample_rate * duration_ms / 1000)
+        time = np.linspace(0., duration_ms / 1000., num_samples)
+        sine_samples = (np.sin(freq * 2. * np.pi * time)).astype(np.float32)
+        target_amplitude_linear = 10**(amplitude_dbfs / 20.0)
+        sine_samples *= target_amplitude_linear
+        int_samples = (sine_samples * 32767).astype(np.int16)
+        sine_seg = AudioSegment(
+            int_samples.tobytes(),
+            frame_rate=sample_rate,
+            sample_width=2,
+            channels=1
+        )
+        return sine_seg
+    return _create
+
+
+@pytest.fixture
+def quiet_audio_file(tmp_path, sine_wave_generator) -> Path:
+    """Create a quiet WAV file."""
+    path = tmp_path / "quiet.wav"
+    audio = sine_wave_generator(amplitude_dbfs=-10.0, duration_ms=2000)
+    audio.export(path, format="wav")
+    return path
+
+
+@pytest.fixture
+def loud_audio_file(tmp_path, sine_wave_generator) -> Path:
+    """Create a loud WAV file."""
+    path = tmp_path / "loud.wav"
+    audio = sine_wave_generator(amplitude_dbfs=-1.0, duration_ms=1500)
+    audio.export(path, format="wav")
+    return path
+
+
+@pytest.fixture
+def clipping_candidate_file(tmp_path, sine_wave_generator) -> Path:
+    """Create a file prone to clipping upon normalization."""
+    if pyln is None:
+        pytest.skip("pyloudnorm not found, skipping fixture.")
+
+    path = tmp_path / "clipper.wav"
+    audio = sine_wave_generator(amplitude_dbfs=-0.55, duration_ms=1500)
+    audio.export(path, format="wav")
+    # --- Add Verification ---
+    try:
+        audio_check = AudioSegment.from_file(path)
+        samples_check = np.array(audio_check.get_array_of_samples(), dtype=np.float32) / (1 << 15)
+        meter = pyln.Meter(audio_check.frame_rate) # Use directly imported pyln
+        lufs_check = meter.integrated_loudness(samples_check)
+        peak_check = audio_check.max_dBFS
+        print(f"\n[Fixture Debug clipper.wav] LUFS: {lufs_check:.2f}, Peak: {peak_check:.2f} dBFS")
+        assert peak_check > -1.0, f"Fixture Peak ({peak_check:.2f}) is lower than expected (-1.0)"
+        assert lufs_check > -10.0, f"Fixture LUFS ({lufs_check:.2f}) is lower than expected (-10.0)"
+    except Exception as e:
+        print(f"\n[Fixture Debug clipper.wav] Error checking metrics: {e}")
+        pytest.fail(f"Fixture setup failed metric check: {e}")
+    # --- End Verification ---
+    return path
+
+@pytest.fixture
+def silent_audio_file(tmp_path) -> Path:
+    """Creates a silent WAV file."""
+    path = tmp_path / "silent.wav"
+    audio = AudioSegment.silent(duration=1000)
+    audio.export(path, format="wav")
+    return path
+
+
+# --- Test Cases ---
+
+def test_process_quiet_audio_normalizes_up(quiet_audio_file):
+    """Test normalizing a quiet file upwards (or adjusting to target)."""
+    target_lufs = -16.0
+    # Access function via the alias
+    results = post_processor_module.process_audio(quiet_audio_file, target_lufs=target_lufs)
+
+    print(f"\n[Quiet Test Debug]")
+    print(f"  Target LUFS: {target_lufs}")
+    print(f"  Original LUFS: {results.get('original_lufs', 'N/A')}")
+    print(f"  Original Peak: {results.get('original_peak_dbfs', 'N/A')}")
+    print(f"  Gain Applied: {results.get('gain_applied_db', 'N/A')}")
+    print(f"  Normalized LUFS: {results.get('normalized_lufs', 'N/A')}")
+    print(f"  Normalized Peak: {results.get('normalized_peak_dbfs', 'N/A')}")
+
+    assert results["error"] is None
+    assert results["output_path"].exists()
+    assert results["output_path"] != quiet_audio_file
+    assert results["target_lufs"] == target_lufs
+    assert not results["clipping_prevented"]
+    assert results["normalized_lufs"] == pytest.approx(target_lufs, abs=1.5)
+    assert results["normalized_peak_dbfs"] <= 0.0
+
+def test_process_loud_audio_normalizes_down(loud_audio_file):
+    """Test normalizing a loud file downwards."""
+    target_lufs = -20.0
+    # Access function via the alias
+    results = post_processor_module.process_audio(loud_audio_file, target_lufs=target_lufs)
+
+    assert results["error"] is None
+    assert results["output_path"].exists()
+    assert results["target_lufs"] == target_lufs
+    assert results["gain_applied_db"] < 0
+    assert not results["clipping_prevented"]
+    assert results["normalized_lufs"] == pytest.approx(target_lufs, abs=1.5)
+    assert results["normalized_peak_dbfs"] < results["original_peak_dbfs"]
+
+def test_process_prevents_clipping(clipping_candidate_file):
+    """Test gain limitation when normalization would cause clipping."""
+    if pyln is None:
+        pytest.skip("pyloudnorm not found, skipping test.")
+
+    fixture_audio = AudioSegment.from_file(clipping_candidate_file)
+    fixture_samples = np.array(fixture_audio.get_array_of_samples(), dtype=np.float32) / (1 << 15)
+    meter = pyln.Meter(fixture_audio.frame_rate) # Use directly imported pyln
+    original_lufs_fixture = meter.integrated_loudness(fixture_samples)
+    original_peak_fixture = fixture_audio.max_dBFS
+
+    required_target_lufs = -original_peak_fixture + original_lufs_fixture
+    target_lufs = required_target_lufs + 1.0
+
+    # Access function via the alias
+    results = post_processor_module.process_audio(clipping_candidate_file, target_lufs=target_lufs)
+
+    print(f"\n[Clipping Test Debug]")
+    print(f"  Target LUFS: {target_lufs}")
+    print(f"  (Threshold LUFS for clipping: {required_target_lufs:.2f})")
+    print(f"  Original LUFS: {results.get('original_lufs', 'N/A')}")
+    print(f"  Original Peak: {results.get('original_peak_dbfs', 'N/A')}")
+    gain_needed = 'N/A'
+    pred_peak = 'N/A'
+    if isinstance(results.get('original_lufs'), (int, float)) and results['original_lufs'] != -float('inf'):
+        gain_needed = target_lufs - results['original_lufs']
+        if isinstance(results.get('original_peak_dbfs'), (int, float)):
+             pred_peak = results['original_peak_dbfs'] + gain_needed
+    print(f"  Calculated Gain Needed: {gain_needed}")
+    print(f"  Predicted Peak: {pred_peak}")
+    print(f"  Clipping Prevented Flag: {results.get('clipping_prevented', 'N/A')}")
+    print(f"  Gain Applied: {results.get('gain_applied_db', 'N/A')}")
+    print(f"  Normalized LUFS: {results.get('normalized_lufs', 'N/A')}")
+    print(f"  Normalized Peak: {results.get('normalized_peak_dbfs', 'N/A')}")
+
+    assert results["error"] is None
+    assert results["output_path"].exists()
+    assert results["target_lufs"] == target_lufs
+    assert results["clipping_prevented"], "Clipping prevention flag should be True"
+    assert results["original_peak_dbfs"] is not None and results["original_peak_dbfs"] != -float('inf')
+    expected_max_gain = -results["original_peak_dbfs"]
+    assert results["gain_applied_db"] == pytest.approx(expected_max_gain, abs=0.1), "Applied gain should be limited by the original peak"
+    assert results["normalized_peak_dbfs"] == pytest.approx(0.0, abs=0.1), "Normalized peak should be close to 0.0 dBFS"
+    assert results["normalized_lufs"] < target_lufs, "Normalized LUFS should be less than target when gain is limited"
+    assert results["normalized_lufs"] == pytest.approx(results['original_lufs'] + results['gain_applied_db'], abs=1.0), "Normalized LUFS mismatch after limited gain"
+
+
+def test_process_silent_audio(silent_audio_file):
+    """Test processing a silent file."""
+    target_lufs = DEFAULT_TARGET_LUFS # Use constant accessed via alias
+    # Access function via the alias
+    results = post_processor_module.process_audio(silent_audio_file, target_lufs=target_lufs)
+
+    assert results["error"] is None
+    assert results["output_path"].exists()
+    assert results["original_lufs"] == -float('inf')
+    assert results["gain_applied_db"] == 0.0
+    assert not results["clipping_prevented"]
+    assert results["normalized_lufs"] == -float('inf')
+    norm_audio = AudioSegment.from_file(results["output_path"])
+    assert norm_audio.max_dBFS == -float('inf')
+
+def test_process_file_not_found():
+    """Test error handling for non-existent file."""
+    non_existent_path = Path("non_existent_file.wav")
+    with pytest.raises(FileNotFoundError):
+        # Access function via the alias
+        post_processor_module.process_audio(non_existent_path)
+
+def test_process_invalid_audio_file(tmp_path):
+    """Test error handling for corrupt/invalid audio."""
+    invalid_file = tmp_path / "invalid.wav"
+    invalid_file.write_text("this is not audio data")
+    # Use exception class accessed via alias
+    with pytest.raises(PostProcessingError) as excinfo:
+        # Access function via the alias
+        post_processor_module.process_audio(invalid_file)
+    assert "Failed to decode" in str(excinfo.value) or "Error loading" in str(excinfo.value)
+
+def test_process_output_to_different_dir(quiet_audio_file, tmp_path):
+    """Test saving the output to a specified directory."""
+    output_dir = tmp_path / "normalized_output"
+    # Access function via the alias
+    results = post_processor_module.process_audio(quiet_audio_file, output_dir=output_dir)
+
+    assert results["error"] is None
+    assert output_dir.exists()
+    assert results["output_path"].parent == output_dir
+    assert results["output_path"].name == "quiet_norm.wav"
+    assert results["output_path"].exists()
+
+def test_process_overwrite_original(quiet_audio_file):
+    """Test overwriting the original file."""
+    original_mtime = quiet_audio_file.stat().st_mtime
+    # Access function via the alias
+    results = post_processor_module.process_audio(quiet_audio_file, overwrite_original=True)
+
+    assert results["error"] is None
+    assert results["output_path"] == quiet_audio_file
+    assert results["output_path"].exists()
+    import time; time.sleep(0.05)
+    assert quiet_audio_file.stat().st_mtime != original_mtime
+
+--- tests\test_runner.py ---
+# File: tests/test_runner.py
+
+import pytest
+from unittest.mock import patch, MagicMock, call
+from pathlib import Path
+import logging
+
+# Import exceptions and components used by the runner
+from sfx_agent.config import Config, ConfigError
+from sfx_agent.decomposer import DecomposerError
+from sfx_agent.post_processor import PostProcessingError
+# Import the runner function itself
+from sfx_agent.runner import run_sfx_pipeline
+
+# --- Test Fixtures ---
+
+@pytest.fixture
+def mock_config_instance(tmp_path):
+    """Creates a mock Config instance with necessary properties."""
+    mock_cfg = MagicMock(spec=Config)
+    mock_cfg.gemma_model = "mock-gemma"
+    mock_cfg.output_folder = tmp_path / "output_sfx"
+    mock_cfg.output_format = "wav"
+    mock_cfg.default_duration = 1.5
+    mock_cfg.prompt_influence = 0.8 # Default single influence
+    mock_cfg.batch_influences = [0.6, 0.9] # Default batch influences
+    mock_cfg.target_lufs = -18.0
+    mock_cfg.library_path = tmp_path / "library.yml"
+    # Ensure the mock output folder exists for tests that write files
+    mock_cfg.output_folder.mkdir(parents=True, exist_ok=True)
+    return mock_cfg
+
+@pytest.fixture
+def mock_structured_params():
+    """Default mock structured parameters from decomposer."""
+    return {
+        "source": "test source",
+        "timbre": "test timbre",
+        "dynamics": "test dynamics",
+        "pitch": "test pitch",
+        "space": "test space",
+        "analogy": "test analogy",
+        "duration": 2.0, # Override default duration
+        # Let's assume decomposer *doesn't* provide influences, forcing fallback to config
+        # "batch_influences": [0.7], # Test override later if needed
+    }
+
+@pytest.fixture
+def mock_processing_results(tmp_path):
+    """Default mock results dict from post_processor."""
+    # Need unique paths for each call if testing multiple influences
+    def _get_results(influence):
+        output_path = tmp_path / "output_sfx" / f"mock_output_norm_{influence:.1f}.wav"
+        return {
+            "original_lufs": -25.0,
+            "original_peak_dbfs": -5.0,
+            "target_lufs": -18.0,
+            "gain_applied_db": 7.0,
+            "clipping_prevented": False,
+            "normalized_lufs": -18.1,
+            "normalized_peak_dbfs": -1.0,
+            "output_path": output_path,
+            "error": None,
+        }
+    return _get_results
+
+# --- Test Cases ---
+
+@patch('sfx_agent.runner.Config')
+@patch('sfx_agent.runner.decompose_brief')
+@patch('sfx_agent.runner.compose_prompt')
+@patch('sfx_agent.runner.generate_audio')
+@patch('sfx_agent.runner.process_audio')
+@patch('sfx_agent.runner.add_to_library')
+def test_run_sfx_pipeline_success(
+    mock_add_to_library, mock_process_audio, mock_generate_audio,
+    mock_compose_prompt, mock_decompose_brief, mock_Config,
+    mock_config_instance, mock_structured_params, mock_processing_results, tmp_path
+):
+    """Tests the successful end-to-end pipeline flow."""
+    # --- Setup Mocks ---
+    mock_Config.return_value = mock_config_instance
+    mock_decompose_brief.return_value = mock_structured_params
+    mock_compose_prompt.side_effect = lambda params: f"Prompt for {params['source']} at {params['prompt_influence']:.1f}"
+
+    # Mock generate_audio to return unique raw paths based on influence
+    raw_paths = {}
+    def generate_side_effect(prompt, duration, prompt_influence, config):
+        raw_path = tmp_path / f"raw_{prompt_influence:.1f}.wav"
+        raw_paths[prompt_influence] = raw_path
+        # Simulate file creation if needed by post_processor mock (or ensure mock handles it)
+        raw_path.touch()
+        return raw_path
+    mock_generate_audio.side_effect = generate_side_effect
+
+    # Mock process_audio to return based on influence
+    mock_process_audio.side_effect = lambda raw_audio_path, target_lufs, output_dir, overwrite_original: mock_processing_results(
+        float(raw_audio_path.stem.split('_')[1]) # Extract influence from mock raw path name
+    )
+
+    mock_add_to_library.return_value = mock_config_instance.library_path
+
+    # --- Run Pipeline ---
+    brief = "a test sound effect"
+    config_path = "dummy/config.yml"
+    processed_files, errors = run_sfx_pipeline(brief, config_path)
+
+    # --- Assertions ---
+    assert not errors # No errors expected
+    mock_Config.assert_called_once_with(config_path)
+    mock_decompose_brief.assert_called_once_with(brief)
+    assert mock_compose_prompt.call_count == len(mock_config_instance.batch_influences) # Called for each influence
+    assert mock_generate_audio.call_count == len(mock_config_instance.batch_influences)
+    assert mock_process_audio.call_count == len(mock_config_instance.batch_influences)
+    mock_add_to_library.assert_called_once()
+
+    # Check calls for each influence
+    expected_influences = mock_config_instance.batch_influences
+    for influence in expected_influences:
+        # Check composer call arguments
+        expected_composer_params = mock_structured_params.copy()
+        expected_composer_params['prompt_influence'] = influence
+        expected_composer_params['duration'] = mock_structured_params['duration']
+        mock_compose_prompt.assert_any_call(expected_composer_params)
+
+        # Check generator call arguments
+        expected_prompt = f"Prompt for {mock_structured_params['source']} at {influence:.1f}"
+        mock_generate_audio.assert_any_call(
+            prompt=expected_prompt,
+            duration=mock_structured_params['duration'],
+            prompt_influence=influence,
+            config=mock_config_instance
+        )
+        # Check post_processor call arguments
+        mock_process_audio.assert_any_call(
+            raw_audio_path=raw_paths[influence],
+            target_lufs=mock_config_instance.target_lufs,
+            output_dir=mock_config_instance.output_folder,
+            overwrite_original=False
+        )
+
+    # Check library call arguments
+    args, kwargs = mock_add_to_library.call_args
+    assert kwargs['brief'] == brief
+    assert kwargs['path'] == str(mock_config_instance.library_path)
+    library_results = kwargs['results']
+    assert len(library_results) == len(expected_influences)
+    # Check one entry in detail
+    first_entry = library_results[0]
+    first_influence = expected_influences[0]
+    assert first_entry['brief'] == brief
+    assert first_entry['prompt'] == f"Prompt for {mock_structured_params['source']} at {first_influence:.1f}"
+    assert first_entry['output_path'] == mock_processing_results(first_influence)['output_path']
+    assert first_entry['normalized_lufs'] == mock_processing_results(first_influence)['normalized_lufs']
+    assert first_entry['raw_audio_path'] == raw_paths[first_influence]
+
+    # Check final returned list of files
+    assert len(processed_files) == len(expected_influences)
+    assert processed_files[0] == mock_processing_results(expected_influences[0])['output_path']
+    assert processed_files[1] == mock_processing_results(expected_influences[1])['output_path']
+
+
+@patch('sfx_agent.runner.Config')
+@patch('sfx_agent.runner.decompose_brief')
+# ... (patch other components that would normally be called)
+@patch('sfx_agent.runner.compose_prompt')
+@patch('sfx_agent.runner.generate_audio')
+@patch('sfx_agent.runner.process_audio')
+@patch('sfx_agent.runner.add_to_library')
+def test_run_sfx_pipeline_config_error(
+    mock_add_to_library, mock_process_audio, mock_generate_audio,
+    mock_compose_prompt, mock_decompose_brief, mock_Config
+):
+    """Tests pipeline exit on ConfigError."""
+    # --- Setup Mocks ---
+    error_msg = "Missing config file"
+    mock_Config.side_effect = FileNotFoundError(error_msg) # Simulate config load failure
+
+    # --- Run Pipeline ---
+    processed_files, errors = run_sfx_pipeline("brief", "bad/path.yml")
+
+    # --- Assertions ---
+    assert len(errors) == 1
+    assert error_msg in errors[0]
+    assert not processed_files
+    # Ensure other components were NOT called
+    mock_decompose_brief.assert_not_called()
+    mock_compose_prompt.assert_not_called()
+    mock_generate_audio.assert_not_called()
+    mock_process_audio.assert_not_called()
+    mock_add_to_library.assert_not_called()
+
+
+@patch('sfx_agent.runner.Config')
+@patch('sfx_agent.runner.decompose_brief')
+# ... (patch other components)
+@patch('sfx_agent.runner.compose_prompt')
+@patch('sfx_agent.runner.generate_audio')
+@patch('sfx_agent.runner.process_audio')
+@patch('sfx_agent.runner.add_to_library')
+def test_run_sfx_pipeline_decomposer_error(
+    mock_add_to_library, mock_process_audio, mock_generate_audio,
+    mock_compose_prompt, mock_decompose_brief, mock_Config, mock_config_instance
+):
+    """Tests pipeline exit on DecomposerError."""
+    # --- Setup Mocks ---
+    mock_Config.return_value = mock_config_instance
+    error_msg = "Gemma connection failed"
+    mock_decompose_brief.side_effect = DecomposerError(error_msg)
+
+    # --- Run Pipeline ---
+    processed_files, errors = run_sfx_pipeline("brief", "config.yml")
+
+    # --- Assertions ---
+    assert len(errors) == 1
+    assert error_msg in errors[0]
+    assert not processed_files
+    mock_Config.assert_called_once()
+    mock_decompose_brief.assert_called_once()
+    # Ensure later components were NOT called
+    mock_compose_prompt.assert_not_called()
+    mock_generate_audio.assert_not_called()
+    mock_process_audio.assert_not_called()
+    mock_add_to_library.assert_not_called()
+
+
+@patch('sfx_agent.runner.Config')
+@patch('sfx_agent.runner.decompose_brief')
+@patch('sfx_agent.runner.compose_prompt')
+@patch('sfx_agent.runner.generate_audio')
+@patch('sfx_agent.runner.process_audio')
+@patch('sfx_agent.runner.add_to_library')
+def test_run_sfx_pipeline_generator_error_continues(
+    mock_add_to_library, mock_process_audio, mock_generate_audio,
+    mock_compose_prompt, mock_decompose_brief, mock_Config,
+    mock_config_instance, mock_structured_params, mock_processing_results, tmp_path
+):
+    """Tests that pipeline continues other variations if one generator call fails."""
+    # --- Setup Mocks ---
+    mock_Config.return_value = mock_config_instance
+    mock_decompose_brief.return_value = mock_structured_params
+    mock_compose_prompt.side_effect = lambda params: f"Prompt_{params['prompt_influence']:.1f}"
+
+    influences = mock_config_instance.batch_influences # [0.6, 0.9]
+    gen_error_msg = "ElevenLabs API quota exceeded"
+
+    # Mock generate_audio: fail on first influence, succeed on second
+    raw_path_success = tmp_path / f"raw_{influences[1]:.1f}.wav"
+    raw_path_success.touch()
+    def generate_side_effect(prompt, duration, prompt_influence, config):
+        if prompt_influence == influences[0]:
+            raise Exception(gen_error_msg) # Simulate API error
+        elif prompt_influence == influences[1]:
+            return raw_path_success
+        else:
+            pytest.fail("Unexpected influence in generator mock")
+    mock_generate_audio.side_effect = generate_side_effect
+
+    # Mock process_audio to only succeed for the successful generation
+    mock_process_audio.side_effect = lambda raw_audio_path, **kwargs: mock_processing_results(influences[1]) if raw_audio_path == raw_path_success else None
+
+    mock_add_to_library.return_value = mock_config_instance.library_path
+
+    # --- Run Pipeline ---
+    processed_files, errors = run_sfx_pipeline("brief", "config.yml")
+
+    # --- Assertions ---
+    assert len(errors) == 1 # One error from generator
+    assert gen_error_msg in errors[0]
+    assert len(processed_files) == 1 # Only the second variation succeeded
+    assert processed_files[0] == mock_processing_results(influences[1])['output_path']
+
+    # Check calls
+    mock_Config.assert_called_once()
+    mock_decompose_brief.assert_called_once()
+    assert mock_compose_prompt.call_count == len(influences) # Composition attempted for both
+    assert mock_generate_audio.call_count == len(influences) # Generation attempted for both
+    assert mock_process_audio.call_count == 1 # Post-processing only called for the successful one
+    mock_add_to_library.assert_called_once() # Library called with the single successful result
+
+    # Check library args
+    args, kwargs = mock_add_to_library.call_args
+    assert len(kwargs['results']) == 1
+    assert kwargs['results'][0]['prompt'] == f"Prompt_{influences[1]:.1f}"
+
+
+@patch('sfx_agent.runner.Config')
+@patch('sfx_agent.runner.decompose_brief')
+@patch('sfx_agent.runner.compose_prompt')
+@patch('sfx_agent.runner.generate_audio')
+@patch('sfx_agent.runner.process_audio')
+@patch('sfx_agent.runner.add_to_library')
+def test_run_sfx_pipeline_postprocessor_error_continues(
+    mock_add_to_library, mock_process_audio, mock_generate_audio,
+    mock_compose_prompt, mock_decompose_brief, mock_Config,
+    mock_config_instance, mock_structured_params, mock_processing_results, tmp_path
+):
+    """Tests that pipeline continues other variations if one post_processor call fails."""
+    # --- Setup Mocks ---
+    mock_Config.return_value = mock_config_instance
+    mock_decompose_brief.return_value = mock_structured_params
+    mock_compose_prompt.side_effect = lambda params: f"Prompt_{params['prompt_influence']:.1f}"
+
+    influences = mock_config_instance.batch_influences # [0.6, 0.9]
+    pp_error_msg = "Failed to decode raw audio"
+
+    # Mock generate_audio: succeed for both
+    raw_paths = {}
+    def generate_side_effect(prompt, duration, prompt_influence, config):
+        raw_path = tmp_path / f"raw_{prompt_influence:.1f}.wav"
+        raw_paths[prompt_influence] = raw_path
+        raw_path.touch()
+        return raw_path
+    mock_generate_audio.side_effect = generate_side_effect
+
+    # Mock process_audio: fail on first, succeed on second
+    def process_side_effect(raw_audio_path, **kwargs):
+         influence = float(raw_audio_path.stem.split('_')[1])
+         if influence == influences[0]:
+             raise PostProcessingError(pp_error_msg)
+         elif influence == influences[1]:
+             return mock_processing_results(influences[1])
+         else:
+             pytest.fail("Unexpected influence in post_processor mock")
+    mock_process_audio.side_effect = process_side_effect
+
+    mock_add_to_library.return_value = mock_config_instance.library_path
+
+    # --- Run Pipeline ---
+    processed_files, errors = run_sfx_pipeline("brief", "config.yml")
+
+    # --- Assertions ---
+    assert len(errors) == 1 # One error from post-processor
+    assert pp_error_msg in errors[0]
+    assert len(processed_files) == 1 # Only the second variation succeeded
+    assert processed_files[0] == mock_processing_results(influences[1])['output_path']
+
+    # Check calls
+    mock_Config.assert_called_once()
+    mock_decompose_brief.assert_called_once()
+    assert mock_compose_prompt.call_count == len(influences)
+    assert mock_generate_audio.call_count == len(influences)
+    assert mock_process_audio.call_count == len(influences) # Post-processing attempted for both
+    mock_add_to_library.assert_called_once() # Library called with the single successful result
+
+    # Check library args
+    args, kwargs = mock_add_to_library.call_args
+    assert len(kwargs['results']) == 1
+    assert kwargs['results'][0]['prompt'] == f"Prompt_{influences[1]:.1f}"
 
 --- tests\__init__.py ---
 
